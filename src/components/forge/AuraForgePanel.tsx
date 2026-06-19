@@ -90,7 +90,7 @@ export function AuraForgePanel({
       className="w-full min-w-0 opacity-100 translate-y-0 transition-all duration-500"
       style={{ maxWidth: 'min(480px, calc(100vw - 32px))' }}
     >
-      <GlassPanel className="p-4 sm:p-5 max-h-[min(50dvh,calc(100dvh-12rem))] overflow-y-auto overscroll-contain min-w-0">
+      <GlassPanel className="p-4 sm:p-5 max-h-[min(50dvh,calc(100dvh-12rem))] overflow-y-auto overscroll-contain scrollbar-hide min-w-0">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4 min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
