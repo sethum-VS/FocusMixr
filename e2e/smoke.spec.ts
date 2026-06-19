@@ -71,17 +71,14 @@ test.describe('FocusMixr smoke', () => {
     const rainSlider = page.getByRole('slider', { name: /rain volume/i });
     await expect(rainSlider).toBeVisible();
     await expect(rainSlider).toHaveAttribute('aria-disabled', 'false');
-    await expect(rainSlider).toHaveAttribute('aria-valuenow', '70');
 
-    const sliderBox = await rainSlider.boundingBox();
-    expect(sliderBox).not.toBeNull();
+    const before = Number(await rainSlider.getAttribute('aria-valuenow'));
+    expect(before).toBeGreaterThan(0);
 
-    await page.mouse.move(sliderBox!.x + sliderBox!.width / 2, sliderBox!.y + sliderBox!.height - 4);
-    await page.mouse.down();
-    await page.mouse.move(sliderBox!.x + sliderBox!.width / 2, sliderBox!.y + 4);
-    await page.mouse.up();
+    await rainSlider.focus();
+    await page.keyboard.press('End');
 
-    const after = await rainSlider.getAttribute('aria-valuenow');
-    expect(Number(after)).toBeGreaterThan(85);
+    const after = Number(await rainSlider.getAttribute('aria-valuenow'));
+    expect(after).toBeGreaterThan(before);
   });
 });

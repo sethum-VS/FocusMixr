@@ -102,7 +102,9 @@ export function VerticalSlider({
       role="slider"
       tabIndex={disabled ? -1 : 0}
       aria-label={`${label} volume`}
+      aria-orientation="vertical"
       aria-valuenow={Math.round(value * 100)}
+      aria-valuetext={`${Math.round(value * 100)} percent`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-disabled={disabled}

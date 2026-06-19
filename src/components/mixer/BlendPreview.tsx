@@ -31,8 +31,6 @@ export function BlendPreview({ state, audioLevels }: BlendPreviewProps) {
   const glowSpread = 6 + energy * 14;
   const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
-  if (!state.journeyStarted) return null;
-
   return (
     <div
       className="w-full px-1"

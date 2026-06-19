@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GlassPanel } from '@/components/layout/GlassPanel';
 import { SoundChannel } from './SoundChannel';
 import { ForgeChannel } from './ForgeChannel';
@@ -42,7 +42,10 @@ export function MixerDock({
   }, [journeyStarted]);
 
   const energy = audioLevels.master;
-  const mixedColor = computeMixedColor(state, audioLevels);
+  const mixedColor = useMemo(
+    () => computeMixedColor(state, audioLevels),
+    [state, audioLevels],
+  );
   // Dynamic glow uses the live blended sound-color, not generic white
   const glowPx = energy * 28;
   const glowAlpha = 0.12 + energy * 0.28;
