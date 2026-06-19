@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 import { vertexShader } from './aurora.vert';
 import { fragmentShader } from './aurora.frag';
 import { ShaderUniforms } from '@/types';
-import { BUILTIN_CHANNELS } from '@/lib/sounds';
+import { computeMixedColorFromUniforms } from '@/lib/colorMix';
 import { expSmooth } from '@/lib/expSmooth';
 
 // Cached at module scope — WebGL support doesn't change at runtime.
@@ -214,18 +214,44 @@ function AuroraMesh({ uniformsRef, reducedMotion }: AuroraMeshProps) {
   );
 }
 
+const FALLBACK_ANCHORS = [
+  { x: '18%', y: '38%' },
+  { x: '82%', y: '32%' },
+  { x: '28%', y: '72%' },
+  { x: '72%', y: '68%' },
+  { x: '50%', y: '20%' },
+  { x: '50%', y: '82%' },
+] as const;
+
 function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
-  const dominant = useMemo(() => {
-    let bestIdx = 0;
-    let bestVol = 0;
-    for (let i = 0; i < uniforms.channelVolumes.length; i++) {
-      if ((uniforms.channelVolumes[i] ?? 0) > bestVol) {
-        bestVol = uniforms.channelVolumes[i] ?? 0;
-        bestIdx = i;
-      }
+  const mixedColor = useMemo(
+    () => computeMixedColorFromUniforms(uniforms),
+    [uniforms],
+  );
+
+  const blobLayers = useMemo(() => {
+    const layers: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const vol = uniforms.channelVolumes[i] ?? 0;
+      if (vol < 0.03) continue;
+      const anchor = FALLBACK_ANCHORS[i];
+      const [r, g, b] = [
+        uniforms.channelColors[i * 3] ?? 0,
+        uniforms.channelColors[i * 3 + 1] ?? 0,
+        uniforms.channelColors[i * 3 + 2] ?? 0,
+      ];
+      const hex = `#${[r, g, b]
+        .map((v) => Math.round(v * 255).toString(16).padStart(2, '0'))
+        .join('')}`;
+      const alpha = Math.round(Math.min(0.55, vol * vol * 0.7) * 255)
+        .toString(16)
+        .padStart(2, '0');
+      layers.push(
+        `radial-gradient(ellipse 45% 40% at ${anchor.x} ${anchor.y}, ${hex}${alpha} 0%, transparent 70%)`,
+      );
     }
-    return BUILTIN_CHANNELS[bestIdx]?.color ?? '#0f172a';
-  }, [uniforms.channelVolumes]);
+    return layers;
+  }, [uniforms.channelColors, uniforms.channelVolumes]);
 
   const progress = uniforms.journeyProgress;
 
@@ -234,14 +260,25 @@ function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
       className="absolute inset-0 overflow-hidden"
       aria-hidden
       style={{
-        background: `radial-gradient(ellipse at 50% 40%, ${dominant}44 0%, #020617 ${40 + progress * 20}%, #000 100%)`,
+        background: `radial-gradient(ellipse at 50% 40%, ${mixedColor}55 0%, #020617 ${40 + progress * 20}%, #000 100%)`,
         transition: 'background 1.2s ease',
       }}
     >
+      {blobLayers.map((layer, i) => (
+        <div
+          key={i}
+          className="absolute inset-0"
+          style={{
+            background: layer,
+            mixBlendMode: 'screen',
+            transition: 'opacity 0.8s ease',
+          }}
+        />
+      ))}
       <div
         className="absolute inset-[-20%] opacity-40 animate-pulse-slow"
         style={{
-          background: `conic-gradient(from 180deg at 50% 50%, ${dominant}22, #020617, ${dominant}33, #000)`,
+          background: `conic-gradient(from 180deg at 50% 50%, ${mixedColor}33, #020617, ${mixedColor}44, #000)`,
           filter: 'blur(60px)',
         }}
       />

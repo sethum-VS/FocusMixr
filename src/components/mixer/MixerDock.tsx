@@ -6,7 +6,9 @@ import { SoundChannel } from './SoundChannel';
 import { ForgeChannel } from './ForgeChannel';
 import { MasterControl } from './MasterControl';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
+import { computeMixedColor } from '@/lib/colorMix';
 import { MixState, ChannelId, AudioLevels } from '@/types';
+import { BlendPreview } from './BlendPreview';
 
 interface MixerDockProps {
   state: MixState;
@@ -39,41 +41,41 @@ export function MixerDock({
     return () => cancelAnimationFrame(id);
   }, [journeyStarted]);
 
-  if (!journeyStarted) return null;
-
   const energy = audioLevels.master;
-  // Dynamic glow intensity scales with master energy
+  const mixedColor = computeMixedColor(state, audioLevels);
+  // Dynamic glow uses the live blended sound-color, not generic white
   const glowPx = energy * 28;
-  const glowAlpha = 0.08 + energy * 0.18;
+  const glowAlpha = 0.12 + energy * 0.28;
   const borderAlpha = 0.10 + energy * 0.22;
 
   return (
     <div
-      className="fixed z-40 left-1/2 w-[calc(100vw-24px)] max-w-4xl bottom-[max(1.5rem,env(safe-area-inset-bottom))]"
+      className="w-full"
       style={{
-        transform: visible
-          ? 'translateX(-50%) translateY(0)'
-          : 'translateX(-50%) translateY(110%)',
+        transform: visible ? 'translateY(0)' : 'translateY(110%)',
         opacity: visible ? 1 : 0,
         transition: 'transform 0.65s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.65s ease',
       }}
     >
       {/* Energy-reactive outer glow wrapper */}
+      <BlendPreview state={state} audioLevels={audioLevels} />
       <div
         style={{
           borderRadius: '1.5rem',
           boxShadow: energy > 0.04
-            ? `0 0 ${glowPx}px rgba(255,255,255,${glowAlpha}), 0 ${glowPx * 0.5}px ${glowPx * 1.5}px rgba(0,0,0,0.5)`
-            : '0 8px 32px rgba(0,0,0,0.5)',
-          transition: 'box-shadow 80ms ease-out',
+            ? `0 0 ${glowPx}px ${mixedColor}${Math.round(glowAlpha * 255).toString(16).padStart(2, '0')}, 0 ${glowPx * 0.5}px ${glowPx * 1.5}px rgba(0,0,0,0.5)`
+            : `0 8px 32px rgba(0,0,0,0.5), 0 0 12px ${mixedColor}22`,
+          transition: 'box-shadow 120ms ease-out',
         }}
       >
         <GlassPanel
-          className="px-2 py-2 sm:px-4 flex items-end gap-0 sm:gap-1 overflow-hidden"
+          className="px-2 py-2.5 sm:px-4 flex flex-col sm:flex-row sm:items-end gap-2.5 sm:gap-1 overflow-hidden"
           style={{
-            borderColor: `rgba(255,255,255,${borderAlpha})`,
+            borderColor: `${mixedColor}${Math.round(borderAlpha * 180).toString(16).padStart(2, '0')}`,
+            transition: 'border-color 200ms ease-out',
           }}
         >
+          {/* Mobile: dedicated master row so channel toggles never sit beside master slider */}
           <MasterControl
             masterVolume={state.masterVolume}
             isPlaying={state.masterPlaying}
@@ -83,9 +85,9 @@ export function MixerDock({
             onTogglePlay={onToggleMasterPlay}
           />
 
-          <div className="w-px h-14 sm:h-16 bg-white/10 mx-0.5 sm:mx-1 self-center shrink-0" />
+          <div className="hidden sm:block w-px h-16 bg-white/10 mx-0.5 sm:mx-1 self-center shrink-0" />
 
-          <div className="flex flex-1 min-w-0 items-end gap-0 overflow-x-auto scrollbar-hide overscroll-x-contain touch-pan-x pb-0.5">
+          <div className="flex flex-1 min-w-0 w-full items-end gap-0 overflow-x-auto scrollbar-hide overscroll-x-contain touch-pan-x pb-0.5 -mx-0.5 px-0.5">
             {BUILTIN_CHANNELS.map((ch, index) => (
               <SoundChannel
                 key={ch.id}
@@ -97,11 +99,12 @@ export function MixerDock({
                 onToggle={() => onToggle(ch.id)}
               />
             ))}
+            <ForgeChannel onOpen={onOpenForge} className="sm:hidden" />
           </div>
 
-          <div className="w-px h-14 sm:h-16 bg-white/10 mx-1 sm:mx-2 self-center shrink-0" />
+          <div className="hidden sm:block w-px h-16 bg-white/10 mx-1 sm:mx-2 self-center shrink-0" />
 
-          <ForgeChannel onOpen={onOpenForge} />
+          <ForgeChannel onOpen={onOpenForge} className="hidden sm:flex" />
         </GlassPanel>
       </div>
     </div>

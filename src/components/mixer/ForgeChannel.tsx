@@ -4,14 +4,15 @@ import { Wand2 } from 'lucide-react';
 
 interface ForgeChannelProps {
   onOpen: () => void;
+  className?: string;
 }
 
-export function ForgeChannel({ onOpen }: ForgeChannelProps) {
+export function ForgeChannel({ onOpen, className = '' }: ForgeChannelProps) {
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex shrink-0 flex-col items-center justify-center self-center gap-2 sm:gap-3 px-2 py-3 sm:px-3 sm:py-4 w-[52px] sm:min-w-[64px] text-white/40 hover:text-white/80 transition-colors group"
+      className={`flex shrink-0 flex-col items-center justify-center self-center gap-2 sm:gap-3 px-2 py-3 sm:px-3 sm:py-4 w-[56px] sm:min-w-[64px] text-white/40 hover:text-white/80 transition-colors group ${className}`}
       aria-label="Open Aura Forge — generate custom sounds"
     >
       <div className="transition-all duration-200 group-hover:text-white/80 group-hover:drop-shadow-[0_0_8px_rgba(139,92,246,0.9)]">

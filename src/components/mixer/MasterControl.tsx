@@ -28,7 +28,7 @@ export function MasterControl({
   const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
   return (
-    <div className="flex shrink-0 items-center gap-2 sm:gap-3 px-2 py-2 sm:px-3 w-[108px] sm:w-auto sm:min-w-[148px]">
+    <div className="flex shrink-0 items-center gap-3 px-1 py-0.5 sm:px-3 sm:py-2 w-full sm:w-auto sm:min-w-[148px] border-b border-white/8 pb-2.5 sm:border-0 sm:pb-0">
       {/* Play / Pause button */}
       <button
         type="button"
@@ -81,8 +81,8 @@ export function MasterControl({
         </div>
 
         {/* Master volume slider */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] tracking-widest uppercase text-white/30">Master</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] sm:text-[9px] tracking-widest uppercase text-white/40 shrink-0">Master</span>
           <input
             type="range"
             min={0}
@@ -91,7 +91,7 @@ export function MasterControl({
             value={masterVolume}
             disabled={disabled}
             onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-            className="flex-1 h-1 accent-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 h-1.5 sm:h-1 accent-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 min-w-0"
             aria-label="Master volume"
             aria-valuenow={Math.round(masterVolume * 100)}
             aria-valuemin={0}

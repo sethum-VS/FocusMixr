@@ -83,14 +83,14 @@ export function AuraForgePanel({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
-      className={`fixed left-1/2 -translate-x-1/2 z-[45] w-full min-w-0 transition-all duration-500 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+14.5rem)] sm:bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+16.5rem)] max-h-[min(70dvh,calc(100dvh-max(1.5rem,env(safe-area-inset-bottom))-14.5rem-5rem))] ${
-        isOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
-      }`}
+      className="w-full min-w-0 opacity-100 translate-y-0 transition-all duration-500"
       style={{ maxWidth: 'min(480px, calc(100vw - 32px))' }}
     >
-      <GlassPanel className="p-4 sm:p-5 max-h-[inherit] overflow-y-auto overscroll-contain min-w-0">
+      <GlassPanel className="p-4 sm:p-5 max-h-[min(50dvh,calc(100dvh-12rem))] overflow-y-auto overscroll-contain min-w-0">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4 min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
