@@ -21,6 +21,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run start` | Serve production build |
 | `npm run test:e2e` | Playwright smoke tests |
 | `npm run lint` | ESLint |
+| `npm run generate:sounds` | Offline ffmpeg procedural loops |
+| `npm run generate:ambient` | ElevenLabs AI loops to `public/sounds/` |
 
 ## Environment
 
@@ -29,6 +31,17 @@ Open [http://localhost:3000](http://localhost:3000).
 | `ELEVENLABS_API_KEY` | No | Enables Aura Forge AI sound generation |
 
 Without the API key, built-in ambient channels still work.
+
+## Documentation
+
+Full docs live in [`docs/`](./docs/README.md) (Diataxis structure):
+
+| | |
+|---|---|
+| **Tutorial** | [Getting started](./docs/tutorial-getting-started.md) — first focus session |
+| **How-to** | [Generate ambient sounds](./docs/how-to-generate-ambient-sounds.md) · [Run tests](./docs/how-to-run-tests.md) |
+| **Reference** | [Configuration](./docs/reference-configuration.md) · [Audio system](./docs/reference-audio-system.md) |
+| **Explanation** | [Architecture](./docs/explanation-architecture.md) |
 
 ## Design
 
