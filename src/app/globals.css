@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  /* FocusMixr channel color tokens */
+  --color-focusmixr-rain:     #3b82f6;
+  --color-focusmixr-fire:     #f97316;
+  --color-focusmixr-coffee:   #78350f;
+  --color-focusmixr-ocean:    #06b6d4;
+  --color-focusmixr-forest:   #22c55e;
+  --color-focusmixr-keyboard: #e2e8f0;
+
+  /* UI colors */
+  --color-surface-glass:  rgba(24, 24, 27, 0.4);
+  --color-border-glass:   rgba(255, 255, 255, 0.1);
+
+  /* Font families */
+  --font-caslon:   'Libre Caslon Text', Georgia, serif;
+  --font-display:  var(--font-caslon);
+  --font-ui:       'DM Sans', system-ui, sans-serif;
+
+  /* Motion values */
+  --duration-journey: 1200ms;
+  --duration-ramp:     80ms;
+  --duration-shader-scale: 0.15;
+}
+
+/* Base */
+:root {
+  color-scheme: dark;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  color: rgba(255, 255, 255, 0.85);
+  overflow-x: hidden;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Slow pulse for Start Journey button */
+@keyframes pulse-slow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.2); }
+  50%       { box-shadow: 0 0 0 12px rgba(255,255,255,0); }
+}
+.animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer { animation: shimmer 1.5s ease-in-out infinite; }
+
+/* Glass panel base styles */
+.glass-panel {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: var(--color-surface-glass);
+  border: 1px solid var(--color-border-glass);
+  border-radius: 1.5rem;
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-slow,
+  .animate-shimmer {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
