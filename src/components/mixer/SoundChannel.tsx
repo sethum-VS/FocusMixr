@@ -39,7 +39,8 @@ export function SoundChannel({
 }: SoundChannelProps) {
   const Icon = ICONS[channel.icon] ?? CloudRain;
   const isActive = state.enabled && !disabled;
-  const pulse = isActive ? Math.min(1, energy * 1.5) : 0;
+  const pulse = isActive ? Math.min(1, energy * 0.9) : 0;
+  const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
   return (
     <div className="flex shrink-0 flex-col items-center gap-2 sm:gap-3 px-2 py-3 sm:px-3 sm:py-4 w-[52px] sm:min-w-[64px]">
@@ -72,8 +73,8 @@ export function SoundChannel({
                     ? `0 0 4px ${channel.color}99`
                     : 'none',
                 transition: isActive
-                  ? 'height 45ms ease-out, box-shadow 45ms ease-out'
-                  : 'height 120ms ease-out',
+                  ? `height 320ms ${fluidEase}, box-shadow 320ms ${fluidEase}`
+                  : 'height 400ms ease-out',
               }}
             />
           );
@@ -84,12 +85,13 @@ export function SoundChannel({
       <div
         className="transition-all"
         style={{
-          transitionDuration: '60ms',
+          transitionDuration: '280ms',
+          transitionTimingFunction: fluidEase,
           color: isActive ? channel.color : 'rgba(255,255,255,0.28)',
           filter: isActive
-            ? `drop-shadow(0 0 ${5 + pulse * 12}px ${channel.color}${Math.round(70 + pulse * 90).toString(16).padStart(2, '0')})`
+            ? `drop-shadow(0 0 ${4 + pulse * 6}px ${channel.color}${Math.round(50 + pulse * 40).toString(16).padStart(2, '0')})`
             : 'none',
-          transform: `scale(${1 + pulse * 0.14})`,
+          transform: `scale(${1 + pulse * 0.05})`,
         }}
       >
         <Icon size={17} strokeWidth={1.5} />

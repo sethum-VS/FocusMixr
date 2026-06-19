@@ -26,8 +26,9 @@ export function VerticalSlider({
   );
 
   const fillPercent = Math.round(value * 100);
-  const pulse = disabled ? 0 : Math.min(1, energy * 1.4);
-  const glowSpread = 6 + pulse * 14;
+  const pulse = disabled ? 0 : Math.min(1, energy * 0.85);
+  const glowSpread = 4 + pulse * 8;
+  const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
   return (
     <div className="relative flex flex-col items-center h-20 sm:h-24">
@@ -43,10 +44,10 @@ export function VerticalSlider({
             boxShadow: disabled
               ? 'none'
               : `0 0 ${glowSpread}px ${accentColor}${Math.round(40 + pulse * 50).toString(16).padStart(2, '0')}`,
-            transform: `scaleX(${1 + pulse * 0.35})`,
+            transform: `scaleX(${1 + pulse * 0.08})`,
             transition: pulse > 0.05
-              ? 'height 40ms ease-out, opacity 40ms ease-out, box-shadow 40ms ease-out, transform 40ms ease-out'
-              : 'height 110ms ease-out, opacity 110ms ease-out',
+              ? `height 300ms ${fluidEase}, opacity 300ms ${fluidEase}, box-shadow 300ms ${fluidEase}, transform 300ms ${fluidEase}`
+              : 'height 350ms ease-out, opacity 350ms ease-out',
           }}
         />
       </div>

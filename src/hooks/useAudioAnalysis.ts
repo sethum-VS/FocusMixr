@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioLevels } from '@/types';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
+import { expSmooth } from '@/lib/expSmooth';
 
 const SILENT_LEVELS: AudioLevels = {
   channel: BUILTIN_CHANNELS.map(() => 0),
@@ -11,7 +12,13 @@ const SILENT_LEVELS: AudioLevels = {
 };
 
 /** UI refresh rate — mixer EQ bars don't need 60fps React updates */
-const UI_FRAME_SKIP = 4;
+const UI_FRAME_SKIP = 2;
+
+// Ambient loops: slow attack, slower release — fluid, not twitchy
+const ENERGY_ATTACK = 2.8;
+const ENERGY_RELEASE = 1.4;
+const MASTER_ATTACK = 2.4;
+const MASTER_RELEASE = 1.2;
 
 function readAnalyserLevel(analyser: AnalyserNode, scratch: Uint8Array<ArrayBuffer>): number {
   analyser.getByteFrequencyData(scratch);
@@ -20,7 +27,8 @@ function readAnalyserLevel(analyser: AnalyserNode, scratch: Uint8Array<ArrayBuff
     const v = scratch[i] / 255;
     sum += v * v;
   }
-  return Math.min(1, Math.sqrt(sum / scratch.length) * 3.4);
+  // Softer gain — raw FFT was overdriving the visual pipeline
+  return Math.min(1, Math.sqrt(sum / scratch.length) * 2.6);
 }
 
 interface AnalyserEntry {
@@ -53,9 +61,13 @@ export function useAudioAnalysis(
     let raf = 0;
     let active = true;
     let frame = 0;
+    let lastTime = performance.now();
 
-    const tick = () => {
+    const tick = (now: number) => {
       if (!active) return;
+      const delta = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
       const ctx = getCtx();
       if (!ctx || ctx.state !== 'running') {
         raf = requestAnimationFrame(tick);
@@ -72,8 +84,7 @@ export function useAudioAnalysis(
         if (!entry) return smoothed.channel[i] ?? 0;
         const raw = readAnalyserLevel(entry.analyser, entry.scratch);
         const prev = smoothed.channel[i] ?? 0;
-        const lerp = raw > prev ? 0.82 : 0.22;
-        const next = prev + (raw - prev) * lerp;
+        const next = expSmooth(prev, raw, delta, ENERGY_ATTACK, ENERGY_RELEASE);
         smoothed.channel[i] = next;
         masterSum += next;
         masterCount++;
@@ -85,8 +96,7 @@ export function useAudioAnalysis(
         if (!entry) return smoothed.custom[i] ?? 0;
         const raw = readAnalyserLevel(entry.analyser, entry.scratch);
         const prev = smoothed.custom[i] ?? 0;
-        const lerp = raw > prev ? 0.82 : 0.22;
-        const next = prev + (raw - prev) * lerp;
+        const next = expSmooth(prev, raw, delta, ENERGY_ATTACK, ENERGY_RELEASE);
         smoothed.custom[i] = next;
         masterSum += next;
         masterCount++;
@@ -94,9 +104,7 @@ export function useAudioAnalysis(
       });
 
       const masterRaw = masterCount > 0 ? masterSum / masterCount : 0;
-      const masterPrev = smoothed.master;
-      const masterLerp = masterRaw > masterPrev ? 0.78 : 0.18;
-      smoothed.master = masterPrev + (masterRaw - masterPrev) * masterLerp;
+      smoothed.master = expSmooth(smoothed.master, masterRaw, delta, MASTER_ATTACK, MASTER_RELEASE);
 
       levelsRef.current = {
         channel: [...channel],

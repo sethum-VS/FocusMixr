@@ -3,11 +3,12 @@
 import { RefObject, useEffect, useRef, useState } from 'react';
 import { AudioLevels, MixState, ShaderUniforms } from '@/types';
 import { BUILTIN_CHANNELS, hexToRgbNorm } from '@/lib/sounds';
+import { expSmooth } from '@/lib/expSmooth';
 
 const MAX_CUSTOM = 4;
 const EPSILON = 0.001;
-const LERP_ATTACK = 0.42;
-const LERP_RELEASE = 0.14;
+const VOLUME_ATTACK = 3.5;
+const VOLUME_RELEASE = 2.0;
 const FALLBACK_FRAME_SKIP = 8;
 
 function computeTargets(state: MixState): { channel: number[]; custom: number[] } {
@@ -27,21 +28,20 @@ function computeTargets(state: MixState): { channel: number[]; custom: number[] 
 function lerpArrays(
   current: { channel: number[]; custom: number[] },
   target: { channel: number[]; custom: number[] },
+  delta: number,
 ): { channel: number[]; custom: number[]; changed: boolean } {
   let changed = false;
 
   const channel = current.channel.map((v, i) => {
     const t = target.channel[i];
-    const lerp = t > v ? LERP_ATTACK : LERP_RELEASE;
-    const next = v + (t - v) * lerp;
+    const next = expSmooth(v, t, delta, VOLUME_ATTACK, VOLUME_RELEASE);
     if (Math.abs(next - v) > EPSILON) changed = true;
     return next;
   });
 
   const custom = current.custom.map((v, i) => {
     const t = target.custom[i];
-    const lerp = t > v ? LERP_ATTACK : LERP_RELEASE;
-    const next = v + (t - v) * lerp;
+    const next = expSmooth(v, t, delta, VOLUME_ATTACK, VOLUME_RELEASE);
     if (Math.abs(next - v) > EPSILON) changed = true;
     return next;
   });
@@ -51,7 +51,8 @@ function lerpArrays(
 
 function combineDrive(volume: number, energy: number): number {
   if (volume <= 0.001) return 0;
-  return Math.min(1, volume * (0.35 + energy * 0.95));
+  // Volume is the base; energy adds a gentle shimmer instead of jitter
+  return Math.min(1, volume * (0.72 + energy * 0.16));
 }
 
 function buildUniforms(
@@ -135,12 +136,15 @@ export function useShaderUniforms(
     let raf = 0;
     let active = true;
     let frame = 0;
+    let lastTime = performance.now();
 
-    const tick = () => {
+    const tick = (now: number) => {
       if (!active) return;
+      const delta = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
 
       const target = computeTargets(state);
-      const next = lerpArrays(smoothedRef.current, target);
+      const next = lerpArrays(smoothedRef.current, target, delta);
       smoothedRef.current = { channel: next.channel, custom: next.custom };
 
       const audio = audioLevelsRef.current;
