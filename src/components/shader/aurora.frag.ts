@@ -49,6 +49,22 @@ export const fragmentShader = /* glsl */ `
     return 130.0 * dot(m, g);
   }
 
+  vec2 channelAnchor(int i) {
+    if (i == 0) return vec2(0.18, 0.38);
+    if (i == 1) return vec2(0.82, 0.32);
+    if (i == 2) return vec2(0.28, 0.72);
+    if (i == 3) return vec2(0.72, 0.68);
+    if (i == 4) return vec2(0.50, 0.20);
+    return vec2(0.50, 0.82);
+  }
+
+  vec2 customAnchor(int i) {
+    if (i == 0) return vec2(0.35, 0.48);
+    if (i == 1) return vec2(0.65, 0.48);
+    if (i == 2) return vec2(0.42, 0.58);
+    return vec2(0.58, 0.58);
+  }
+
   void main() {
     vec2 uv = vUv;
 
@@ -117,10 +133,47 @@ export const fragmentShader = /* glsl */ `
       channelTint = vec3(0.10, 0.14, 0.40);
     }
 
-    float tintStrength = clamp(totalWeight * (0.24 + audioDrive * 0.16), 0.0, 0.36);
-    color = mix(color, color * 0.45 + channelTint * 0.55, tintStrength * m1);
+    // --- Spatial color blobs — each sound paints a visible region that blends where they overlap ---
+    vec3  spatialAccum = vec3(0.0);
+    float spatialWeight = 0.0;
+    float activeCount   = 0.0;
 
-    color += channelTint * audioDrive * 0.012;
+    for (int i = 0; i < 6; i++) {
+      float vol = u_channelVolumes[i];
+      if (vol > 0.025) {
+        vec2  toAnchor = uv - channelAnchor(i);
+        float dist     = length(toAnchor);
+        float edge     = 0.38 + 0.14 * snoise(uv * 2.2 + t * 0.45 + float(i) * 1.9);
+        float blob     = smoothstep(edge, 0.0, dist) * vol * vol * (0.7 + u_channelEnergy[i] * 0.3);
+        spatialAccum  += u_channelColors[i] * blob;
+        spatialWeight += blob;
+        activeCount  += 1.0;
+      }
+    }
+    for (int i = 0; i < 4; i++) {
+      float vol = u_customVolumes[i];
+      if (vol > 0.025) {
+        float dist = length(uv - customAnchor(i));
+        float edge = 0.32 + 0.12 * snoise(uv * 2.4 + t * 0.55 + float(i) * 2.3);
+        float blob = smoothstep(edge, 0.0, dist) * vol * vol * (0.7 + u_customEnergy[i] * 0.3);
+        spatialAccum  += u_customColors[i] * blob;
+        spatialWeight += blob;
+        activeCount  += 1.0;
+      }
+    }
+
+    if (spatialWeight > 0.001) {
+      vec3 spatialMix = spatialAccum / spatialWeight;
+      float multiBoost = 1.0 + max(0.0, activeCount - 1.0) * 0.12;
+      float blendAmt   = clamp(sqrt(spatialWeight) * 0.62 * multiBoost, 0.0, 0.78);
+      vec3 screenBlend = 1.0 - (1.0 - color) * (1.0 - spatialMix * blendAmt);
+      color = mix(color, screenBlend, blendAmt * (0.5 + m1 * 0.5));
+    }
+
+    float tintStrength = clamp(totalWeight * (0.32 + audioDrive * 0.22), 0.0, 0.52);
+    color = mix(color, color * 0.38 + channelTint * 0.62, tintStrength * m1);
+
+    color += channelTint * audioDrive * 0.022;
 
     // --- Water-drop ripples (soft dissolve) ---
     for (int i = 0; i < 3; i++) {
@@ -138,7 +191,8 @@ export const fragmentShader = /* glsl */ `
         float pulse = exp(-dist * dist * 22.0) * exp(-elapsed * 6.0);
 
         float ripple = (ring + ring2 + ring3 + pulse) * u_dropStrength[i];
-        color += channelTint * ripple * 0.14;
+        // Ripples carry the live mixed tint — reinforces color-of-sound feedback
+        color += channelTint * ripple * 0.22;
       }
     }
 

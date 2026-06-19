@@ -108,34 +108,35 @@ export function FocusMixrExperience() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
       <ShaderBackground uniformsRef={uniformsRef} fallbackUniforms={fallbackUniforms} />
-      <TopNav
-        onStartJourney={handleStartJourney}
-        journeyStarted={state.journeyStarted}
-      />
+      <TopNav />
       <HeroSection
         journeyStarted={state.journeyStarted}
         onStartJourney={handleStartJourney}
       />
-      <MixerDock
-        state={state}
-        audioLevels={displayLevels}
-        onVolumeChange={setVolume}
-        onToggle={toggleChannel}
-        onMasterVolumeChange={setMasterVolume}
-        onToggleMasterPlay={toggleMasterPlay}
-        onOpenForge={() => setForgeOpen(true)}
-      />
-      <AuraForgePanel
-        state={state}
-        isOpen={forgeOpen}
-        onClose={() => setForgeOpen(false)}
-        journeyStarted={state.journeyStarted}
-        onAddCustomSound={addCustomSound}
-        onRemoveCustomSound={removeCustomSound}
-        onCustomVolumeChange={setCustomVolume}
-        onCustomAccentChange={setCustomAccent}
-        onToggleCustom={toggleCustom}
-      />
+      {state.journeyStarted && (
+        <div className="fixed z-40 left-1/2 -translate-x-1/2 bottom-[max(1.5rem,env(safe-area-inset-bottom))] w-[calc(100vw-24px)] max-w-4xl flex flex-col-reverse items-center gap-3">
+          <MixerDock
+            state={state}
+            audioLevels={displayLevels}
+            onVolumeChange={setVolume}
+            onToggle={toggleChannel}
+            onMasterVolumeChange={setMasterVolume}
+            onToggleMasterPlay={toggleMasterPlay}
+            onOpenForge={() => setForgeOpen(true)}
+          />
+          <AuraForgePanel
+            state={state}
+            isOpen={forgeOpen}
+            onClose={() => setForgeOpen(false)}
+            journeyStarted={state.journeyStarted}
+            onAddCustomSound={addCustomSound}
+            onRemoveCustomSound={removeCustomSound}
+            onCustomVolumeChange={setCustomVolume}
+            onCustomAccentChange={setCustomAccent}
+            onToggleCustom={toggleCustom}
+          />
+        </div>
+      )}
       {toast && (
         <div
           role="status"

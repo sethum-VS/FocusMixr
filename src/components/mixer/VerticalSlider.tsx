@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 
 interface VerticalSliderProps {
   value: number;
@@ -25,15 +25,99 @@ export function VerticalSlider({
     () => false,
   );
 
+  const trackRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
   const fillPercent = Math.round(value * 100);
   const pulse = disabled ? 0 : Math.min(1, energy * 0.85);
   const glowSpread = 4 + pulse * 8;
   const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
+  const valueFromClientY = useCallback(
+    (clientY: number) => {
+      const track = trackRef.current;
+      if (!track) return value;
+      const { top, height } = track.getBoundingClientRect();
+      if (height <= 0) return value;
+      const ratio = 1 - (clientY - top) / height;
+      return Math.min(1, Math.max(0, ratio));
+    },
+    [value],
+  );
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      draggingRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      onChange(valueFromClientY(e.clientY));
+    },
+    [disabled, onChange, valueFromClientY],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current || disabled) return;
+      onChange(valueFromClientY(e.clientY));
+    },
+    [disabled, onChange, valueFromClientY],
+  );
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      const step = e.shiftKey ? 0.1 : 0.02;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        onChange(Math.min(1, value + step));
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        onChange(Math.max(0, value - step));
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        onChange(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        onChange(1);
+      }
+    },
+    [disabled, onChange, value],
+  );
+
+  if (!mounted) {
+    return (
+      <div className="relative flex flex-col items-center justify-center h-[88px] sm:h-24 w-12 sm:w-11 shrink-0" aria-hidden />
+    );
+  }
+
   return (
-    <div className="relative flex flex-col items-center h-20 sm:h-24">
-      {/* Track */}
-      <div className="relative w-1 h-full rounded-full bg-white/10">
+    <div
+      ref={trackRef}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={`${label} volume`}
+      aria-orientation="vertical"
+      aria-valuenow={Math.round(value * 100)}
+      aria-valuetext={`${Math.round(value * 100)} percent`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-disabled={disabled}
+      className="relative flex flex-col items-center justify-center h-[88px] sm:h-24 w-12 sm:w-11 shrink-0 touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/50 focus-visible:outline-offset-2 rounded-xl sm:rounded-lg disabled:cursor-not-allowed"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onKeyDown={handleKeyDown}
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 }}
+    >
+      {/* Track — wider on mobile for visibility and easier dragging */}
+      <div className="relative w-2 sm:w-1 h-full rounded-full bg-white/10 pointer-events-none ring-1 ring-inset ring-white/5">
         {/* Fill bar */}
         <div
           className="absolute bottom-0 left-0 right-0 rounded-full"
@@ -50,32 +134,21 @@ export function VerticalSlider({
               : 'height 350ms ease-out, opacity 350ms ease-out',
           }}
         />
+        {/* Mobile thumb — shows grab point along the track */}
+        {!disabled && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 rounded-full pointer-events-none sm:hidden"
+            style={{
+              bottom: `calc(${fillPercent}% - 6px)`,
+              width: '14px',
+              height: '14px',
+              backgroundColor: accentColor,
+              boxShadow: `0 0 8px ${accentColor}aa, 0 0 0 2px rgba(255,255,255,0.85)`,
+              transition: 'bottom 350ms ease-out',
+            }}
+          />
+        )}
       </div>
-
-      {/* Native range input — client-only to avoid SSR attribute mismatch */}
-      {mounted && (
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
-        style={{
-          writingMode: 'vertical-lr',
-          direction: 'rtl',
-          width: '100%',
-          height: '100%',
-        }}
-        aria-label={`${label} volume`}
-        aria-valuenow={Math.round(value * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-disabled={disabled}
-      />
-      )}
     </div>
   );
 }
