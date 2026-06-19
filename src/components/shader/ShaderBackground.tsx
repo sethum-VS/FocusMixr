@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { RefObject, useRef, useEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSyncExternalStore } from 'react';
@@ -22,7 +22,6 @@ function canUseWebGL(): boolean {
   }
 }
 
-// --- prefers-reduced-motion sync store ---
 function subscribeReducedMotion(onChange: () => void) {
   if (typeof window === 'undefined') return () => {};
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -35,19 +34,17 @@ function getReducedMotionSnapshot() {
 }
 function getReducedMotionServerSnapshot() { return false; }
 
-// --- Inner mesh component (inside Canvas context) ---
 interface AuroraMeshProps {
-  uniforms: ShaderUniforms;
+  uniformsRef: RefObject<ShaderUniforms>;
   reducedMotion: boolean;
 }
 
-function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
+function AuroraMesh({ uniformsRef, reducedMotion }: AuroraMeshProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const { size } = useThree();
   const mouseRef = useRef(new THREE.Vector2(0.5, 0.5));
   const journeyLerp = useRef(0);
 
-  // Build initial uniform structure (only created once)
   const uniformDefs = useMemo<Record<string, THREE.IUniform>>(() => ({
     u_time:           { value: 0 },
     u_resolution:     { value: new THREE.Vector2(1, 1) },
@@ -75,7 +72,8 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
 
   useFrame((_, delta) => {
     const mat = matRef.current;
-    if (!mat) return;
+    const uniforms = uniformsRef.current;
+    if (!mat || !uniforms) return;
 
     if (!reducedMotion) {
       const energyBoost = 1 + (uniforms.masterEnergy ?? 0) * 1.8;
@@ -85,29 +83,24 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
     mat.uniforms.u_resolution.value.set(size.width, size.height);
     mat.uniforms.u_mouse.value.lerp(mouseRef.current, 0.05);
 
-    // Lerp journey progress over ~1.2s
     journeyLerp.current += (uniforms.journeyProgress - journeyLerp.current) * Math.min(delta * 0.8, 1);
     mat.uniforms.u_journeyProgress.value = journeyLerp.current;
 
-    // Channel colors
     const cc = uniforms.channelColors;
     for (let i = 0; i < 6; i++) {
       (mat.uniforms.u_channelColors.value as THREE.Vector3[])[i]
         ?.set(cc[i * 3] ?? 0, cc[i * 3 + 1] ?? 0, cc[i * 3 + 2] ?? 0);
     }
-    // Channel volumes
     for (let i = 0; i < 6; i++) {
       (mat.uniforms.u_channelVolumes.value as number[])[i] = uniforms.channelVolumes[i] ?? 0;
       (mat.uniforms.u_channelEnergy.value as number[])[i] = uniforms.channelEnergy[i] ?? 0;
     }
 
-    // Custom colors
     const xc = uniforms.customColors;
     for (let i = 0; i < 4; i++) {
       (mat.uniforms.u_customColors.value as THREE.Vector3[])[i]
         ?.set(xc[i * 3] ?? 0, xc[i * 3 + 1] ?? 0, xc[i * 3 + 2] ?? 0);
     }
-    // Custom volumes
     for (let i = 0; i < 4; i++) {
       (mat.uniforms.u_customVolumes.value as number[])[i] = uniforms.customVolumes[i] ?? 0;
       (mat.uniforms.u_customEnergy.value as number[])[i] = uniforms.customEnergy[i] ?? 0;
@@ -131,7 +124,6 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
   );
 }
 
-// --- CSS fallback when WebGL is unavailable ---
 function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
   const dominant = useMemo(() => {
     let bestIdx = 0;
@@ -167,12 +159,12 @@ function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
   );
 }
 
-// --- Public component ---
 interface ShaderBackgroundProps {
-  uniforms: ShaderUniforms;
+  uniformsRef: RefObject<ShaderUniforms>;
+  fallbackUniforms: ShaderUniforms;
 }
 
-export function ShaderBackground({ uniforms }: ShaderBackgroundProps) {
+export function ShaderBackground({ uniformsRef, fallbackUniforms }: ShaderBackgroundProps) {
   const [webglFailed, setWebglFailed] = useState(false);
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -194,7 +186,7 @@ export function ShaderBackground({ uniforms }: ShaderBackgroundProps) {
   if (!mounted || !webglSupported || webglFailed) {
     return (
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <CssAuroraFallback uniforms={uniforms} />
+        <CssAuroraFallback uniforms={fallbackUniforms} />
       </div>
     );
   }
@@ -215,7 +207,7 @@ export function ShaderBackground({ uniforms }: ShaderBackgroundProps) {
         }}
         onError={() => setWebglFailed(true)}
       >
-        <AuroraMesh uniforms={uniforms} reducedMotion={reducedMotion} />
+        <AuroraMesh uniformsRef={uniformsRef} reducedMotion={reducedMotion} />
       </Canvas>
     </div>
   );

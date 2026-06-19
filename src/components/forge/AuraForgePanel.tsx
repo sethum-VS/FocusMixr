@@ -85,22 +85,22 @@ export function AuraForgePanel({
 
   return (
     <div
-      className={`fixed left-1/2 -translate-x-1/2 z-30 transition-all duration-500 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+11rem)] sm:bottom-36 ${
+      className={`fixed left-1/2 -translate-x-1/2 z-[45] w-full min-w-0 transition-all duration-500 bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+14.5rem)] sm:bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+16.5rem)] max-h-[min(70dvh,calc(100dvh-max(1.5rem,env(safe-area-inset-bottom))-14.5rem-5rem))] ${
         isOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
       }`}
-      style={{ width: 'min(480px, calc(100vw - 32px))' }}
+      style={{ maxWidth: 'min(480px, calc(100vw - 32px))' }}
     >
-      <GlassPanel className="p-5">
+      <GlassPanel className="p-4 sm:p-5 max-h-[inherit] overflow-y-auto overscroll-contain min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Wand2 size={16} className="text-violet-400" strokeWidth={1.5} />
-            <h2 className="text-sm font-medium text-white/80 tracking-wide">Aura Forge</h2>
-            <span className="text-xs text-white/30 ml-1">AI Sound Generation</span>
+        <div className="flex items-start justify-between gap-3 mb-4 min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Wand2 size={16} className="shrink-0 text-violet-400" strokeWidth={1.5} />
+            <h2 className="shrink-0 text-sm font-medium text-white/80 tracking-wide">Aura Forge</h2>
+            <span className="text-xs text-white/30 sm:ml-1">AI Sound Generation</span>
           </div>
           <button
             onClick={onClose}
-            className="text-white/30 hover:text-white/70 transition-colors p-1"
+            className="shrink-0 text-white/30 hover:text-white/70 transition-colors p-1 -mr-1"
             aria-label="Close Aura Forge"
           >
             <X size={16} strokeWidth={1.5} />
@@ -108,7 +108,7 @@ export function AuraForgePanel({
         </div>
 
         {/* Prompt input */}
-        <div className="flex gap-2 mb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch mb-3 min-w-0">
           <input
             type="text"
             value={prompt}
@@ -116,14 +116,14 @@ export function AuraForgePanel({
             onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleGenerate(); }}
             placeholder="Describe an ambient sound… (e.g. deep cave drips)"
             maxLength={500}
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
+            className="w-full min-w-0 flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30 transition-colors"
             aria-label="Sound prompt"
             disabled={loading}
           />
           <button
             onClick={handleGenerate}
             disabled={loading || !prompt.trim() || !journeyStarted}
-            className="relative px-4 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
+            className="relative shrink-0 w-full sm:w-auto px-4 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden whitespace-nowrap"
             style={{
               background: loading
                 ? 'rgba(139,92,246,0.3)'
@@ -150,8 +150,8 @@ export function AuraForgePanel({
         </div>
 
         {/* Accent picker */}
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-xs text-white/30">Accent:</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 min-w-0">
+          <span className="shrink-0 text-xs text-white/30">Accent:</span>
           <AccentColorPicker value={accentColor} onChange={setAccentColor} />
         </div>
 

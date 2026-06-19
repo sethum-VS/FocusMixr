@@ -15,188 +15,123 @@ export const fragmentShader = /* glsl */ `
 
   varying vec2 vUv;
 
-  // Permutation helpers for simplex noise
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
-  vec4 mod289(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
-  vec4 permute(vec4 x) { return mod289(((x*34.0)+10.0)*x); }
-  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+  // --- 2D Simplex noise ---
+  vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
 
-  float snoise(vec3 v) {
-    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
-    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-
-    vec3 i  = floor(v + dot(v, C.yyy));
-    vec3 x0 = v - i + dot(i, C.xxx);
-
-    vec3 g = step(x0.yzx, x0.xyz);
-    vec3 l = 1.0 - g;
-    vec3 i1 = min(g.xyz, l.zxy);
-    vec3 i2 = max(g.xyz, l.zxy);
-
-    vec3 x1 = x0 - i1 + C.xxx;
-    vec3 x2 = x0 - i2 + C.yyy;
-    vec3 x3 = x0 - D.yyy;
-
-    i = mod289(i);
-    vec4 p = permute(permute(permute(
-      i.z + vec4(0.0, i1.z, i2.z, 1.0)) +
-      i.y + vec4(0.0, i1.y, i2.y, 1.0)) +
-      i.x + vec4(0.0, i1.x, i2.x, 1.0));
-
-    float n_ = 0.142857142857;
-    vec3 ns = n_ * D.wyz - D.xzx;
-
-    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-    vec4 x_ = floor(j * ns.z);
-    vec4 y_ = floor(j - 7.0 * x_);
-    vec4 x = x_ *ns.x + ns.yyyy;
-    vec4 y = y_ *ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(x) - abs(y);
-    vec4 b0 = vec4(x.xy, y.xy);
-    vec4 b1 = vec4(x.zw, y.zw);
-    vec4 s0 = floor(b0)*2.0 + 1.0;
-    vec4 s1 = floor(b1)*2.0 + 1.0;
-    vec4 sh = -step(h, vec4(0.0));
-    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
-    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
-    vec3 p0 = vec3(a0.xy, h.x);
-    vec3 p1 = vec3(a0.zw, h.y);
-    vec3 p2 = vec3(a1.xy, h.z);
-    vec3 p3 = vec3(a1.zw, h.w);
-
-    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-
-    vec4 m = max(0.5 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  float snoise(vec2 v) {
+    const vec4 C = vec4(0.211324865405187,  0.366025403784439,
+                       -0.577350269189626,  0.024390243902439);
+    vec2 i  = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1  = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy  -= i1;
+    i = mod(i, 289.0);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
+                           + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
+                            dot(x12.zw, x12.zw)), 0.0);
     m = m * m;
-    return 105.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
-  }
-
-  float fbm(vec3 p, int octaves) {
-    float val = 0.0;
-    float amp = 0.5;
-    float freq = 1.0;
-    for (int i = 0; i < 5; i++) {
-      if (i >= octaves) break;
-      val += snoise(p * freq) * amp;
-      freq *= 2.0;
-      amp *= 0.5;
-    }
-    return val;
+    m = m * m;
+    vec3 x  = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h  = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    vec3 g;
+    g.x  = a0.x  * x0.x  + h.x  * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
   }
 
   void main() {
     vec2 uv = vUv;
-    vec2 aspect = vec2(u_resolution.x / u_resolution.y, 1.0);
 
-    vec2 mouseOffset = (u_mouse - 0.5) * (0.04 + u_masterEnergy * 0.06);
+    // Audio drive (0 = silent, 1 = peak energy)
+    float audioDrive = clamp(u_masterEnergy * 2.2, 0.0, 1.0);
 
-    float audioDrive = clamp(u_masterEnergy * 1.4, 0.0, 1.0);
-    float t = u_time * (0.15 + audioDrive * 0.55);
+    // Time advances faster with audio energy (base ×0.15 matching design spec)
+    float t = u_time * (0.15 + audioDrive * 0.32);
 
-    vec3 base0 = vec3(0.03, 0.05, 0.15);
-    vec3 base1 = vec3(0.02, 0.08, 0.05);
-    vec3 base2 = vec3(0.10, 0.07, 0.02);
-    vec3 base3 = vec3(0.01, 0.01, 0.03);
-
-    vec2 warp = vec2(0.0);
+    // --- Audio-driven domain warp from active channels ---
+    vec2  warp       = vec2(0.0);
     float warpWeight = 0.0;
     for (int i = 0; i < 6; i++) {
-      float drive = u_channelVolumes[i] * (0.5 + u_channelEnergy[i] * 1.5);
-      float angle = float(i) * 1.047 + t * 0.2;
-      vec2 offset = vec2(cos(angle), sin(angle)) * drive * 0.18;
-      warp += offset;
-      warpWeight += drive;
+      float drive = u_channelVolumes[i] * (0.5 + u_channelEnergy[i] * 2.0);
+      float angle = float(i) * 1.047 + t * 0.30;
+      warp       += vec2(cos(angle), sin(angle)) * drive * 0.10;
+      warpWeight += u_channelVolumes[i];
     }
     for (int i = 0; i < 4; i++) {
-      float drive = u_customVolumes[i] * (0.5 + u_customEnergy[i] * 1.5);
-      float angle = float(i) * 1.57 + t * 0.35;
-      vec2 offset = vec2(sin(angle), cos(angle)) * drive * 0.22;
-      warp += offset;
-      warpWeight += drive;
+      float drive = u_customVolumes[i] * (0.5 + u_customEnergy[i] * 2.0);
+      float angle = float(i) * 1.571 + t * 0.45;
+      warp       += vec2(sin(angle), cos(angle)) * drive * 0.12;
+      warpWeight += u_customVolumes[i];
     }
     if (warpWeight > 0.001) warp /= warpWeight;
-    vec2 warpedUv = uv + mouseOffset + warp;
 
-    int octaves = int(clamp(3.0 + audioDrive * 2.0, 3.0, 5.0));
+    vec2 wuv = uv + warp;
 
-    vec3 p1 = vec3(warpedUv * aspect * (1.2 + audioDrive * 0.4) + vec2(t * 0.3, t * 0.1), t);
-    float n1 = fbm(p1, octaves);
+    // --- Organic layered noise (user's design aesthetic) ---
+    float n1 = snoise(wuv * 1.5 + t);
+    float n2 = snoise(wuv * 2.5 - t * 0.8 + n1);  // domain-warped by n1
+    float n3 = snoise(wuv * 0.5 + t * 0.4);
 
-    vec3 p2 = vec3(warpedUv * aspect * 0.8 + vec2(-t * 0.15, t * 0.25), t * 1.3);
-    float n2 = fbm(p2, max(octaves - 1, 2));
+    // Base palette: deep oceanic blues, forest greens, warm amber, true black
+    vec3 color1 = vec3(0.01, 0.05, 0.15);  // Deep Blue
+    vec3 color2 = vec3(0.02, 0.12, 0.08);  // Forest Green
+    vec3 color3 = vec3(0.18, 0.08, 0.02);  // Warm Amber
+    vec3 color4 = vec3(0.00, 0.00, 0.00);  // True Black
 
-    vec3 p3 = vec3(warpedUv * aspect * (2.5 + audioDrive) + vec2(t * 0.05, -t * 0.2), t * 0.7);
-    float n3 = fbm(p3, 2);
+    float m1 = smoothstep(-1.0, 1.0, n1);
+    float m2 = smoothstep(-1.0, 1.0, n2);
+    float m3 = smoothstep(-1.0, 1.0, n3);
 
-    float combined = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
-    combined = combined * 0.5 + 0.5;
+    vec3 color = mix(color1, color2, m1);
+    color = mix(color, color3, m2 * 0.4);
+    color = mix(color, color4, m3 * 0.3);
 
-    vec3 baseColor = mix(base3, base0, smoothstep(0.0, 0.4, combined));
-    baseColor = mix(baseColor, base1, smoothstep(0.3, 0.6, combined) * 0.6);
-    baseColor = mix(baseColor, base2, smoothstep(0.55, 0.85, combined) * 0.4);
+    // Subtle noise-driven brightness variation (from original design)
+    color += 0.05 * n2;
 
-    float totalChannelWeight = 0.0;
-    vec3 channelBlend = vec3(0.0);
+    // --- Channel color accumulation: active sounds tint the palette ---
+    float totalWeight  = 0.0;
+    vec3  channelTint  = vec3(0.0);
     for (int i = 0; i < 6; i++) {
-      float vol = u_channelVolumes[i];
-      float energy = u_channelEnergy[i];
-      float weight = vol * vol * (1.0 + energy * 2.5);
-      channelBlend += u_channelColors[i] * weight;
-      totalChannelWeight += weight;
+      float w = u_channelVolumes[i] * u_channelVolumes[i] * (1.0 + u_channelEnergy[i] * 3.5);
+      channelTint  += u_channelColors[i] * w;
+      totalWeight  += w;
     }
     for (int i = 0; i < 4; i++) {
-      float vol = u_customVolumes[i];
-      float energy = u_customEnergy[i];
-      float weight = vol * vol * (1.0 + energy * 2.5);
-      channelBlend += u_customColors[i] * weight;
-      totalChannelWeight += weight;
+      float w = u_customVolumes[i] * u_customVolumes[i] * (1.0 + u_customEnergy[i] * 3.5);
+      channelTint  += u_customColors[i] * w;
+      totalWeight  += w;
     }
-    if (totalChannelWeight > 0.001) {
-      channelBlend /= totalChannelWeight;
-    }
-
-    float noiseMask = smoothstep(0.28, 0.78, combined);
-    float channelStrength = totalChannelWeight > 0.001
-      ? clamp(totalChannelWeight * (0.55 + audioDrive * 0.35), 0.0, 0.85)
-      : 0.0;
-    vec3 colorWithChannels = mix(baseColor, channelBlend * 0.55, noiseMask * channelStrength);
-
-    for (int i = 0; i < 6; i++) {
-      float bloom = u_channelVolumes[i] * u_channelEnergy[i];
-      if (bloom > 0.02) {
-        float peak = smoothstep(0.5, 0.72, combined) * smoothstep(0.9, 0.55, combined + 0.35);
-        colorWithChannels += u_channelColors[i] * peak * bloom * 0.45;
-      }
-    }
-    for (int i = 0; i < 4; i++) {
-      float bloom = u_customVolumes[i] * u_customEnergy[i];
-      if (bloom > 0.02) {
-        float peak = smoothstep(0.45, 0.68, combined) * smoothstep(0.88, 0.5, combined + 0.3);
-        colorWithChannels += u_customColors[i] * peak * bloom * 0.55;
-      }
+    if (totalWeight > 0.001) {
+      channelTint /= totalWeight;
+    } else {
+      // Idle default: deep indigo so the canvas is never totally flat
+      channelTint = vec3(0.10, 0.14, 0.40);
     }
 
-    float glowMask = smoothstep(0.58, 0.82, combined) * smoothstep(0.86, 0.58, combined + 0.28);
-    vec3 glowColor = channelBlend * 1.1;
-    colorWithChannels += glowColor * glowMask * channelStrength * (0.45 + audioDrive * 0.55);
+    // Blend channel tint into the organic layers — rides the noise mask
+    float tintStrength = clamp(totalWeight * (0.28 + audioDrive * 0.38), 0.0, 0.52);
+    color = mix(color, color * 0.45 + channelTint * 0.55, tintStrength * m1);
 
-    float pulse = sin(t * (4.0 + audioDrive * 6.0)) * 0.5 + 0.5;
-    float dist = length((uv - 0.5) * aspect);
-    float ring = smoothstep(0.35 + pulse * 0.08, 0.32 + pulse * 0.08, dist)
-               * smoothstep(0.08, 0.14, dist);
-    colorWithChannels += channelBlend * ring * audioDrive * 0.25;
+    // Beat-reactive brightness flash
+    color += channelTint * audioDrive * 0.07;
 
-    float brightness = mix(0.45, 1.0, u_journeyProgress) * (1.0 + audioDrive * 0.22);
-    float saturation = mix(0.5, 1.0, u_journeyProgress) * (1.0 + audioDrive * 0.15);
-    vec3 grey = vec3(dot(colorWithChannels, vec3(0.299, 0.587, 0.114)));
-    vec3 finalColor = mix(grey, colorWithChannels, saturation) * brightness;
+    // --- Journey progress: fade in from near-black, boost saturation ---
+    float brightness = mix(0.32, 1.22, u_journeyProgress) * (1.0 + audioDrive * 0.22);
+    float saturation = mix(0.48, 1.06, u_journeyProgress);
+    vec3 grey   = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
+    color = mix(grey, color, saturation) * brightness;
 
-    vec2 vigUv = uv * 2.0 - 1.0;
-    float vignette = 1.0 - dot(vigUv * vec2(0.6, 0.8), vigUv * vec2(0.6, 0.8));
-    vignette = clamp(vignette, 0.0, 1.0);
-    finalColor *= mix(0.5, 1.0, vignette);
+    // --- Subtle vignette (spotlight center) ---
+    vec2  vigUv  = uv * 2.0 - 1.0;
+    float vign   = 1.0 - dot(vigUv * vec2(0.50, 0.70), vigUv * vec2(0.50, 0.70));
+    color *= mix(0.22, 1.0, clamp(vign, 0.0, 1.0));
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(color, 1.0);
   }
 `;

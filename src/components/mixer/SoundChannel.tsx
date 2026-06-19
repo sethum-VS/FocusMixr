@@ -17,6 +17,9 @@ const ICONS: Record<string, LucideIcon> = {
   Keyboard,
 };
 
+// Relative heights for the four EQ bars — staggered so they feel alive
+const EQ_SCALES = [0.72, 1.0, 0.88, 0.64];
+
 interface SoundChannelProps {
   channel: BuiltinChannel;
   state: ChannelState;
@@ -49,28 +52,56 @@ export function SoundChannel({
         energy={energy}
       />
 
-      <div
-        className="transition-all duration-75"
-        style={{
-          color: isActive ? channel.color : 'rgba(255,255,255,0.3)',
-          filter: isActive
-            ? `drop-shadow(0 0 ${6 + pulse * 10}px ${channel.color}${Math.round(80 + pulse * 80).toString(16).padStart(2, '0')})`
-            : 'none',
-          transform: `scale(${1 + pulse * 0.12})`,
-        }}
-      >
-        <Icon size={18} strokeWidth={1.5} />
+      {/* Mini 4-bar EQ visualizer — bounces with audio energy */}
+      <div className="flex items-end gap-[2px] h-4 w-fit" aria-hidden>
+        {EQ_SCALES.map((scale, i) => {
+          const barH = isActive
+            ? Math.max(2, energy * scale * 16)
+            : 2;
+          return (
+            <div
+              key={i}
+              style={{
+                width: '3px',
+                height: `${barH}px`,
+                minHeight: '2px',
+                borderRadius: '1.5px',
+                backgroundColor: isActive ? channel.color : 'rgba(255,255,255,0.10)',
+                boxShadow:
+                  isActive && energy > 0.08
+                    ? `0 0 4px ${channel.color}99`
+                    : 'none',
+                transition: isActive
+                  ? 'height 45ms ease-out, box-shadow 45ms ease-out'
+                  : 'height 120ms ease-out',
+              }}
+            />
+          );
+        })}
       </div>
 
-      {/* Label — icons + toggle aria-labels suffice on narrow screens */}
+      {/* Channel icon */}
+      <div
+        className="transition-all"
+        style={{
+          transitionDuration: '60ms',
+          color: isActive ? channel.color : 'rgba(255,255,255,0.28)',
+          filter: isActive
+            ? `drop-shadow(0 0 ${5 + pulse * 12}px ${channel.color}${Math.round(70 + pulse * 90).toString(16).padStart(2, '0')})`
+            : 'none',
+          transform: `scale(${1 + pulse * 0.14})`,
+        }}
+      >
+        <Icon size={17} strokeWidth={1.5} />
+      </div>
+
       <span
         className="hidden sm:block text-xs font-medium tracking-wide transition-colors text-center"
-        style={{ color: isActive ? channel.color : 'rgba(255,255,255,0.3)' }}
+        style={{ color: isActive ? channel.color : 'rgba(255,255,255,0.28)' }}
       >
         {channel.label}
       </span>
 
-      {/* Toggle */}
       <SoundToggle
         enabled={state.enabled}
         onToggle={onToggle}

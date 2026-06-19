@@ -1,7 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ShaderBackground } from '@/components/shader/ShaderBackground';
 import { TopNav } from '@/components/nav/TopNav';
 import { HeroSection } from '@/components/hero/HeroSection';
 import { MixerDock } from '@/components/mixer/MixerDock';
@@ -10,6 +10,19 @@ import { useMixState } from '@/hooks/useMixState';
 import { useAudioEngine } from '@/hooks/useAudioEngine';
 import { useAudioAnalysis } from '@/hooks/useAudioAnalysis';
 import { useShaderUniforms } from '@/hooks/useShaderUniforms';
+
+const ShaderBackground = dynamic(
+  () =>
+    import('@/components/shader/ShaderBackground').then((m) => ({
+      default: m.ShaderBackground,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-0 pointer-events-none bg-[#020617]" aria-hidden />
+    ),
+  },
+);
 
 export function FocusMixrExperience() {
   const {
@@ -28,17 +41,21 @@ export function FocusMixrExperience() {
 
   const [toast, setToast] = useState<string | null>(null);
   const [forgeOpen, setForgeOpen] = useState(false);
-  const [journeyProgress, setJourneyProgress] = useState(0);
+  const journeyProgressRef = useRef(0);
   const journeyAnimRef = useRef<number | null>(null);
 
   const { getCtx, getChannelAnalysers } = useAudioEngine(state, (msg) => setToast(msg));
-  const audioLevels = useAudioAnalysis(
+  const { levelsRef, displayLevels } = useAudioAnalysis(
     getCtx,
     getChannelAnalysers,
     state.journeyStarted,
     state.masterPlaying,
   );
-  const uniforms = useShaderUniforms(state, journeyProgress, audioLevels);
+  const { uniformsRef, fallbackUniforms } = useShaderUniforms(
+    state,
+    journeyProgressRef,
+    levelsRef,
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -52,7 +69,7 @@ export function FocusMixrExperience() {
 
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
-      setJourneyProgress(t);
+      journeyProgressRef.current = t;
       if (t < 1) {
         journeyAnimRef.current = requestAnimationFrame(step);
       }
@@ -76,7 +93,7 @@ export function FocusMixrExperience() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
-      <ShaderBackground uniforms={uniforms} />
+      <ShaderBackground uniformsRef={uniformsRef} fallbackUniforms={fallbackUniforms} />
       <TopNav
         onStartJourney={handleStartJourney}
         journeyStarted={state.journeyStarted}
@@ -87,7 +104,7 @@ export function FocusMixrExperience() {
       />
       <MixerDock
         state={state}
-        audioLevels={audioLevels}
+        audioLevels={displayLevels}
         onVolumeChange={setVolume}
         onToggle={toggleChannel}
         onMasterVolumeChange={setMasterVolume}

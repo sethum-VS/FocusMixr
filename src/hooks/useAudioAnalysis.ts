@@ -10,6 +10,9 @@ const SILENT_LEVELS: AudioLevels = {
   master: 0,
 };
 
+/** UI refresh rate — mixer EQ bars don't need 60fps React updates */
+const UI_FRAME_SKIP = 4;
+
 function readAnalyserLevel(analyser: AnalyserNode, scratch: Uint8Array<ArrayBuffer>): number {
   analyser.getByteFrequencyData(scratch);
   let sum = 0;
@@ -17,7 +20,7 @@ function readAnalyserLevel(analyser: AnalyserNode, scratch: Uint8Array<ArrayBuff
     const v = scratch[i] / 255;
     sum += v * v;
   }
-  return Math.min(1, Math.sqrt(sum / scratch.length) * 2.2);
+  return Math.min(1, Math.sqrt(sum / scratch.length) * 3.4);
 }
 
 interface AnalyserEntry {
@@ -30,8 +33,9 @@ export function useAudioAnalysis(
   getChannelAnalysers: () => Map<string, AnalyserEntry>,
   journeyStarted: boolean,
   masterPlaying: boolean,
-): AudioLevels {
-  const [levels, setLevels] = useState<AudioLevels>(SILENT_LEVELS);
+) {
+  const levelsRef = useRef<AudioLevels>(SILENT_LEVELS);
+  const [displayLevels, setDisplayLevels] = useState<AudioLevels>(SILENT_LEVELS);
   const smoothedRef = useRef({ ...SILENT_LEVELS, channel: [...SILENT_LEVELS.channel], custom: [...SILENT_LEVELS.custom] });
 
   useEffect(() => {
@@ -41,12 +45,14 @@ export function useAudioAnalysis(
         custom: [0, 0, 0, 0],
         master: 0,
       };
-      setLevels(SILENT_LEVELS);
-      return;
+      levelsRef.current = SILENT_LEVELS;
+      const resetId = requestAnimationFrame(() => setDisplayLevels(SILENT_LEVELS));
+      return () => cancelAnimationFrame(resetId);
     }
 
     let raf = 0;
     let active = true;
+    let frame = 0;
 
     const tick = () => {
       if (!active) return;
@@ -66,7 +72,7 @@ export function useAudioAnalysis(
         if (!entry) return smoothed.channel[i] ?? 0;
         const raw = readAnalyserLevel(entry.analyser, entry.scratch);
         const prev = smoothed.channel[i] ?? 0;
-        const lerp = raw > prev ? 0.55 : 0.18;
+        const lerp = raw > prev ? 0.82 : 0.22;
         const next = prev + (raw - prev) * lerp;
         smoothed.channel[i] = next;
         masterSum += next;
@@ -79,7 +85,7 @@ export function useAudioAnalysis(
         if (!entry) return smoothed.custom[i] ?? 0;
         const raw = readAnalyserLevel(entry.analyser, entry.scratch);
         const prev = smoothed.custom[i] ?? 0;
-        const lerp = raw > prev ? 0.55 : 0.18;
+        const lerp = raw > prev ? 0.82 : 0.22;
         const next = prev + (raw - prev) * lerp;
         smoothed.custom[i] = next;
         masterSum += next;
@@ -89,14 +95,19 @@ export function useAudioAnalysis(
 
       const masterRaw = masterCount > 0 ? masterSum / masterCount : 0;
       const masterPrev = smoothed.master;
-      const masterLerp = masterRaw > masterPrev ? 0.5 : 0.15;
+      const masterLerp = masterRaw > masterPrev ? 0.78 : 0.18;
       smoothed.master = masterPrev + (masterRaw - masterPrev) * masterLerp;
 
-      setLevels({
+      levelsRef.current = {
         channel: [...channel],
         custom: [...custom],
         master: smoothed.master,
-      });
+      };
+
+      frame++;
+      if (frame % UI_FRAME_SKIP === 0) {
+        setDisplayLevels(levelsRef.current);
+      }
 
       raf = requestAnimationFrame(tick);
     };
@@ -108,7 +119,7 @@ export function useAudioAnalysis(
     };
   }, [getCtx, getChannelAnalysers, journeyStarted, masterPlaying]);
 
-  return levels;
+  return { levelsRef, displayLevels };
 }
 
 export type { AnalyserEntry };

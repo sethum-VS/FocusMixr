@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { RefObject, useEffect, useRef, useState } from 'react';
 import { AudioLevels, MixState, ShaderUniforms } from '@/types';
 import { BUILTIN_CHANNELS, hexToRgbNorm } from '@/lib/sounds';
 
@@ -8,6 +8,7 @@ const MAX_CUSTOM = 4;
 const EPSILON = 0.001;
 const LERP_ATTACK = 0.42;
 const LERP_RELEASE = 0.14;
+const FALLBACK_FRAME_SKIP = 8;
 
 function computeTargets(state: MixState): { channel: number[]; custom: number[] } {
   const channel = BUILTIN_CHANNELS.map((ch) => {
@@ -53,44 +54,12 @@ function combineDrive(volume: number, energy: number): number {
   return Math.min(1, volume * (0.35 + energy * 0.95));
 }
 
-export function useShaderUniforms(
+function buildUniforms(
   state: MixState,
+  smoothed: { channel: number[]; custom: number[] },
+  audio: AudioLevels,
   journeyProgress: number,
-  audioLevels: AudioLevels,
 ): ShaderUniforms {
-  const [smoothed, setSmoothed] = useState(() => ({
-    channel: BUILTIN_CHANNELS.map(() => 0),
-    custom: [0, 0, 0, 0],
-  }));
-
-  useEffect(() => {
-    let raf = 0;
-    let active = true;
-
-    const tick = () => {
-      if (!active) return;
-
-      setSmoothed((current) => {
-        const target = computeTargets(state);
-        const next = lerpArrays(current, target);
-
-        if (next.changed) {
-          raf = requestAnimationFrame(tick);
-        }
-
-        if (!next.changed) return current;
-        return { channel: next.channel, custom: next.custom };
-      });
-    };
-
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      active = false;
-      cancelAnimationFrame(raf);
-    };
-  }, [state]);
-
   const channelColors: number[] = [];
   const channelVolumes: number[] = [];
   const channelEnergy: number[] = [];
@@ -99,7 +68,7 @@ export function useShaderUniforms(
     const ch = BUILTIN_CHANNELS[i];
     const [r, g, b] = hexToRgbNorm(ch.color);
     const vol = smoothed.channel[i] ?? 0;
-    const energy = audioLevels.channel[i] ?? 0;
+    const energy = audio.channel[i] ?? 0;
     channelColors.push(r, g, b);
     channelVolumes.push(combineDrive(vol, energy));
     channelEnergy.push(energy);
@@ -111,7 +80,7 @@ export function useShaderUniforms(
 
   for (let i = 0; i < MAX_CUSTOM; i++) {
     const cs = state.customSounds[i];
-    const energy = audioLevels.custom[i] ?? 0;
+    const energy = audio.custom[i] ?? 0;
     if (cs) {
       const [r, g, b] = hexToRgbNorm(cs.accentColor || '#ffffff');
       const vol = smoothed.custom[i] ?? 0;
@@ -132,7 +101,74 @@ export function useShaderUniforms(
     customColors,
     customVolumes,
     customEnergy,
-    masterEnergy: audioLevels.master,
+    masterEnergy: audio.master,
     journeyProgress,
   };
+}
+
+function idleUniforms(): ShaderUniforms {
+  return {
+    channelColors: BUILTIN_CHANNELS.flatMap((ch) => hexToRgbNorm(ch.color)),
+    channelVolumes: BUILTIN_CHANNELS.map(() => 0),
+    channelEnergy: BUILTIN_CHANNELS.map(() => 0),
+    customColors: Array.from({ length: MAX_CUSTOM * 3 }, () => 0),
+    customVolumes: Array.from({ length: MAX_CUSTOM }, () => 0),
+    customEnergy: Array.from({ length: MAX_CUSTOM }, () => 0),
+    masterEnergy: 0,
+    journeyProgress: 0,
+  };
+}
+
+export function useShaderUniforms(
+  state: MixState,
+  journeyProgressRef: RefObject<number>,
+  audioLevelsRef: RefObject<AudioLevels>,
+): { uniformsRef: RefObject<ShaderUniforms>; fallbackUniforms: ShaderUniforms } {
+  const smoothedRef = useRef({
+    channel: BUILTIN_CHANNELS.map(() => 0),
+    custom: [0, 0, 0, 0],
+  });
+  const uniformsRef = useRef<ShaderUniforms>(idleUniforms());
+  const [fallbackUniforms, setFallbackUniforms] = useState<ShaderUniforms>(() => idleUniforms());
+
+  useEffect(() => {
+    let raf = 0;
+    let active = true;
+    let frame = 0;
+
+    const tick = () => {
+      if (!active) return;
+
+      const target = computeTargets(state);
+      const next = lerpArrays(smoothedRef.current, target);
+      smoothedRef.current = { channel: next.channel, custom: next.custom };
+
+      const audio = audioLevelsRef.current;
+      const journeyProgress = journeyProgressRef.current ?? 0;
+      uniformsRef.current = buildUniforms(state, smoothedRef.current, audio, journeyProgress);
+
+      frame++;
+      if (frame % FALLBACK_FRAME_SKIP === 0) {
+        setFallbackUniforms(uniformsRef.current);
+      }
+
+      const animating =
+        next.changed ||
+        (state.journeyStarted && state.masterPlaying) ||
+        (state.journeyStarted && journeyProgress > 0 && journeyProgress < 1);
+
+      if (animating) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(raf);
+    };
+  }, [state, audioLevelsRef, journeyProgressRef]);
+
+  return { uniformsRef, fallbackUniforms };
 }

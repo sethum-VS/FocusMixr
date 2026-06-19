@@ -45,8 +45,8 @@ export function VerticalSlider({
               : `0 0 ${glowSpread}px ${accentColor}${Math.round(40 + pulse * 50).toString(16).padStart(2, '0')}`,
             transform: `scaleX(${1 + pulse * 0.35})`,
             transition: pulse > 0.05
-              ? 'height 80ms ease-out, opacity 60ms ease-out, box-shadow 60ms ease-out, transform 60ms ease-out'
-              : 'height 150ms ease-out, opacity 150ms ease-out',
+              ? 'height 40ms ease-out, opacity 40ms ease-out, box-shadow 40ms ease-out, transform 40ms ease-out'
+              : 'height 110ms ease-out, opacity 110ms ease-out',
           }}
         />
       </div>
