@@ -54,8 +54,11 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
     u_mouse:          { value: new THREE.Vector2(0.5, 0.5) },
     u_channelColors:  { value: Array.from({ length: 6 }, () => new THREE.Vector3()) },
     u_channelVolumes: { value: new Array(6).fill(0) },
+    u_channelEnergy:  { value: new Array(6).fill(0) },
     u_customColors:   { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
     u_customVolumes:  { value: new Array(4).fill(0) },
+    u_customEnergy:   { value: new Array(4).fill(0) },
+    u_masterEnergy:   { value: 0 },
     u_journeyProgress:{ value: 0 },
   }), []);
 
@@ -75,7 +78,8 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
     if (!mat) return;
 
     if (!reducedMotion) {
-      mat.uniforms.u_time.value += delta;
+      const energyBoost = 1 + (uniforms.masterEnergy ?? 0) * 1.8;
+      mat.uniforms.u_time.value += delta * energyBoost;
     }
 
     mat.uniforms.u_resolution.value.set(size.width, size.height);
@@ -94,6 +98,7 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
     // Channel volumes
     for (let i = 0; i < 6; i++) {
       (mat.uniforms.u_channelVolumes.value as number[])[i] = uniforms.channelVolumes[i] ?? 0;
+      (mat.uniforms.u_channelEnergy.value as number[])[i] = uniforms.channelEnergy[i] ?? 0;
     }
 
     // Custom colors
@@ -105,7 +110,10 @@ function AuroraMesh({ uniforms, reducedMotion }: AuroraMeshProps) {
     // Custom volumes
     for (let i = 0; i < 4; i++) {
       (mat.uniforms.u_customVolumes.value as number[])[i] = uniforms.customVolumes[i] ?? 0;
+      (mat.uniforms.u_customEnergy.value as number[])[i] = uniforms.customEnergy[i] ?? 0;
     }
+
+    mat.uniforms.u_masterEnergy.value = uniforms.masterEnergy ?? 0;
   });
 
   return (

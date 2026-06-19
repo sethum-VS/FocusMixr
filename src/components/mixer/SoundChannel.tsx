@@ -20,6 +20,7 @@ const ICONS: Record<string, LucideIcon> = {
 interface SoundChannelProps {
   channel: BuiltinChannel;
   state: ChannelState;
+  energy?: number;
   disabled?: boolean;
   onVolumeChange: (v: number) => void;
   onToggle: () => void;
@@ -28,30 +29,34 @@ interface SoundChannelProps {
 export function SoundChannel({
   channel,
   state,
+  energy = 0,
   disabled = false,
   onVolumeChange,
   onToggle,
 }: SoundChannelProps) {
   const Icon = ICONS[channel.icon] ?? CloudRain;
   const isActive = state.enabled && !disabled;
+  const pulse = isActive ? Math.min(1, energy * 1.5) : 0;
 
   return (
     <div className="flex shrink-0 flex-col items-center gap-2 sm:gap-3 px-2 py-3 sm:px-3 sm:py-4 w-[52px] sm:min-w-[64px]">
-      {/* Vertical slider */}
       <VerticalSlider
         value={state.volume}
         onChange={onVolumeChange}
         accentColor={channel.color}
         disabled={disabled || !state.enabled}
         label={channel.label}
+        energy={energy}
       />
 
-      {/* Icon */}
       <div
-        className="transition-all duration-300"
+        className="transition-all duration-75"
         style={{
           color: isActive ? channel.color : 'rgba(255,255,255,0.3)',
-          filter: isActive ? `drop-shadow(0 0 6px ${channel.color}80)` : 'none',
+          filter: isActive
+            ? `drop-shadow(0 0 ${6 + pulse * 10}px ${channel.color}${Math.round(80 + pulse * 80).toString(16).padStart(2, '0')})`
+            : 'none',
+          transform: `scale(${1 + pulse * 0.12})`,
         }}
       >
         <Icon size={18} strokeWidth={1.5} />

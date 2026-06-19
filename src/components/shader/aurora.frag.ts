@@ -6,8 +6,11 @@ export const fragmentShader = /* glsl */ `
   uniform vec2 u_mouse;
   uniform vec3 u_channelColors[6];
   uniform float u_channelVolumes[6];
+  uniform float u_channelEnergy[6];
   uniform vec3 u_customColors[4];
   uniform float u_customVolumes[4];
+  uniform float u_customEnergy[4];
+  uniform float u_masterEnergy;
   uniform float u_journeyProgress;
 
   varying vec2 vUv;
@@ -86,74 +89,109 @@ export const fragmentShader = /* glsl */ `
     vec2 uv = vUv;
     vec2 aspect = vec2(u_resolution.x / u_resolution.y, 1.0);
 
-    // Subtle mouse parallax
-    vec2 mouseOffset = (u_mouse - 0.5) * 0.04;
+    vec2 mouseOffset = (u_mouse - 0.5) * (0.04 + u_masterEnergy * 0.06);
 
-    float t = u_time * 0.15;
+    float audioDrive = clamp(u_masterEnergy * 1.4, 0.0, 1.0);
+    float t = u_time * (0.15 + audioDrive * 0.55);
 
-    // Base dark palette: deep navy, forest green, amber warmth, void black
-    vec3 base0 = vec3(0.03, 0.05, 0.15); // deep navy
-    vec3 base1 = vec3(0.02, 0.08, 0.05); // dark forest
-    vec3 base2 = vec3(0.10, 0.07, 0.02); // amber dark
-    vec3 base3 = vec3(0.01, 0.01, 0.03); // near black
+    vec3 base0 = vec3(0.03, 0.05, 0.15);
+    vec3 base1 = vec3(0.02, 0.08, 0.05);
+    vec3 base2 = vec3(0.10, 0.07, 0.02);
+    vec3 base3 = vec3(0.01, 0.01, 0.03);
 
-    // Primary aurora layer — slow horizontal ribbons
-    vec3 p1 = vec3((uv + mouseOffset) * aspect * 1.2 + vec2(t * 0.3, t * 0.1), t);
-    float n1 = fbm(p1, 4);
+    vec2 warp = vec2(0.0);
+    float warpWeight = 0.0;
+    for (int i = 0; i < 6; i++) {
+      float drive = u_channelVolumes[i] * (0.5 + u_channelEnergy[i] * 1.5);
+      float angle = float(i) * 1.047 + t * 0.2;
+      vec2 offset = vec2(cos(angle), sin(angle)) * drive * 0.18;
+      warp += offset;
+      warpWeight += drive;
+    }
+    for (int i = 0; i < 4; i++) {
+      float drive = u_customVolumes[i] * (0.5 + u_customEnergy[i] * 1.5);
+      float angle = float(i) * 1.57 + t * 0.35;
+      vec2 offset = vec2(sin(angle), cos(angle)) * drive * 0.22;
+      warp += offset;
+      warpWeight += drive;
+    }
+    if (warpWeight > 0.001) warp /= warpWeight;
+    vec2 warpedUv = uv + mouseOffset + warp;
 
-    // Secondary layer — cross-diagonal drift
-    vec3 p2 = vec3((uv + mouseOffset) * aspect * 0.8 + vec2(-t * 0.15, t * 0.25), t * 1.3);
-    float n2 = fbm(p2, 3);
+    int octaves = int(clamp(3.0 + audioDrive * 2.0, 3.0, 5.0));
 
-    // Tertiary fine detail
-    vec3 p3 = vec3((uv + mouseOffset) * aspect * 2.5 + vec2(t * 0.05, -t * 0.2), t * 0.7);
+    vec3 p1 = vec3(warpedUv * aspect * (1.2 + audioDrive * 0.4) + vec2(t * 0.3, t * 0.1), t);
+    float n1 = fbm(p1, octaves);
+
+    vec3 p2 = vec3(warpedUv * aspect * 0.8 + vec2(-t * 0.15, t * 0.25), t * 1.3);
+    float n2 = fbm(p2, max(octaves - 1, 2));
+
+    vec3 p3 = vec3(warpedUv * aspect * (2.5 + audioDrive) + vec2(t * 0.05, -t * 0.2), t * 0.7);
     float n3 = fbm(p3, 2);
 
-    // Combine noise layers
     float combined = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
-    combined = combined * 0.5 + 0.5; // remap to [0,1]
+    combined = combined * 0.5 + 0.5;
 
-    // Base color from palette
     vec3 baseColor = mix(base3, base0, smoothstep(0.0, 0.4, combined));
     baseColor = mix(baseColor, base1, smoothstep(0.3, 0.6, combined) * 0.6);
     baseColor = mix(baseColor, base2, smoothstep(0.55, 0.85, combined) * 0.4);
 
-    // --- Inject channel colors weighted by volume ---
     float totalChannelWeight = 0.0;
     vec3 channelBlend = vec3(0.0);
     for (int i = 0; i < 6; i++) {
       float vol = u_channelVolumes[i];
-      channelBlend += u_channelColors[i] * vol * vol; // square for punchier response
-      totalChannelWeight += vol * vol;
+      float energy = u_channelEnergy[i];
+      float weight = vol * vol * (1.0 + energy * 2.5);
+      channelBlend += u_channelColors[i] * weight;
+      totalChannelWeight += weight;
     }
     for (int i = 0; i < 4; i++) {
       float vol = u_customVolumes[i];
-      channelBlend += u_customColors[i] * vol * vol;
-      totalChannelWeight += vol * vol;
+      float energy = u_customEnergy[i];
+      float weight = vol * vol * (1.0 + energy * 2.5);
+      channelBlend += u_customColors[i] * weight;
+      totalChannelWeight += weight;
     }
     if (totalChannelWeight > 0.001) {
       channelBlend /= totalChannelWeight;
     }
 
-    // Blend channel color into aurora via noise mask
-    float noiseMask = smoothstep(0.35, 0.75, combined);
+    float noiseMask = smoothstep(0.28, 0.78, combined);
     float channelStrength = totalChannelWeight > 0.001
-      ? clamp(totalChannelWeight * 0.6, 0.0, 0.65)
+      ? clamp(totalChannelWeight * (0.55 + audioDrive * 0.35), 0.0, 0.85)
       : 0.0;
-    vec3 colorWithChannels = mix(baseColor, channelBlend * 0.4, noiseMask * channelStrength);
+    vec3 colorWithChannels = mix(baseColor, channelBlend * 0.55, noiseMask * channelStrength);
 
-    // Emissive glow for active channels: add bright streaks at the ribbon peaks
-    float glowMask = smoothstep(0.62, 0.82, combined) * smoothstep(0.82, 0.62, combined + 0.25);
-    vec3 glowColor = channelBlend * 0.9;
-    colorWithChannels += glowColor * glowMask * channelStrength * 0.5;
+    for (int i = 0; i < 6; i++) {
+      float bloom = u_channelVolumes[i] * u_channelEnergy[i];
+      if (bloom > 0.02) {
+        float peak = smoothstep(0.5, 0.72, combined) * smoothstep(0.9, 0.55, combined + 0.35);
+        colorWithChannels += u_channelColors[i] * peak * bloom * 0.45;
+      }
+    }
+    for (int i = 0; i < 4; i++) {
+      float bloom = u_customVolumes[i] * u_customEnergy[i];
+      if (bloom > 0.02) {
+        float peak = smoothstep(0.45, 0.68, combined) * smoothstep(0.88, 0.5, combined + 0.3);
+        colorWithChannels += u_customColors[i] * peak * bloom * 0.55;
+      }
+    }
 
-    // Journey progress: multiply brightness and saturation
-    float brightness = mix(0.45, 1.0, u_journeyProgress);
-    float saturation = mix(0.5, 1.0, u_journeyProgress);
+    float glowMask = smoothstep(0.58, 0.82, combined) * smoothstep(0.86, 0.58, combined + 0.28);
+    vec3 glowColor = channelBlend * 1.1;
+    colorWithChannels += glowColor * glowMask * channelStrength * (0.45 + audioDrive * 0.55);
+
+    float pulse = sin(t * (4.0 + audioDrive * 6.0)) * 0.5 + 0.5;
+    float dist = length((uv - 0.5) * aspect);
+    float ring = smoothstep(0.35 + pulse * 0.08, 0.32 + pulse * 0.08, dist)
+               * smoothstep(0.08, 0.14, dist);
+    colorWithChannels += channelBlend * ring * audioDrive * 0.25;
+
+    float brightness = mix(0.45, 1.0, u_journeyProgress) * (1.0 + audioDrive * 0.22);
+    float saturation = mix(0.5, 1.0, u_journeyProgress) * (1.0 + audioDrive * 0.15);
     vec3 grey = vec3(dot(colorWithChannels, vec3(0.299, 0.587, 0.114)));
     vec3 finalColor = mix(grey, colorWithChannels, saturation) * brightness;
 
-    // Subtle vignette
     vec2 vigUv = uv * 2.0 - 1.0;
     float vignette = 1.0 - dot(vigUv * vec2(0.6, 0.8), vigUv * vec2(0.6, 0.8));
     vignette = clamp(vignette, 0.0, 1.0);

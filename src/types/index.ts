@@ -44,10 +44,19 @@ export type MixAction =
   | { type: 'HYDRATE_CUSTOM_BUFFERS'; buffers: Record<string, ArrayBuffer> }
   | { type: 'RESTORE_PERSISTED'; payload: Partial<MixState> };
 
+export interface AudioLevels {
+  channel: number[];
+  custom: number[];
+  master: number;
+}
+
 export interface ShaderUniforms {
   channelColors: number[];
   channelVolumes: number[];
+  channelEnergy: number[];
   customColors: number[];
   customVolumes: number[];
+  customEnergy: number[];
+  masterEnergy: number;
   journeyProgress: number;
 }

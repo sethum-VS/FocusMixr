@@ -8,6 +8,7 @@ interface VerticalSliderProps {
   accentColor?: string;
   disabled?: boolean;
   label: string;
+  energy?: number;
 }
 
 export function VerticalSlider({
@@ -16,6 +17,7 @@ export function VerticalSlider({
   accentColor = '#ffffff',
   disabled = false,
   label,
+  energy = 0,
 }: VerticalSliderProps) {
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -24,6 +26,8 @@ export function VerticalSlider({
   );
 
   const fillPercent = Math.round(value * 100);
+  const pulse = disabled ? 0 : Math.min(1, energy * 1.4);
+  const glowSpread = 6 + pulse * 14;
 
   return (
     <div className="relative flex flex-col items-center h-20 sm:h-24">
@@ -31,12 +35,18 @@ export function VerticalSlider({
       <div className="relative w-1 h-full rounded-full bg-white/10">
         {/* Fill bar */}
         <div
-          className="absolute bottom-0 left-0 right-0 rounded-full transition-all duration-150"
+          className="absolute bottom-0 left-0 right-0 rounded-full"
           style={{
             height: `${fillPercent}%`,
             backgroundColor: accentColor,
-            opacity: disabled ? 0.3 : 0.85,
-            boxShadow: disabled ? 'none' : `0 0 6px ${accentColor}60`,
+            opacity: disabled ? 0.3 : 0.75 + pulse * 0.25,
+            boxShadow: disabled
+              ? 'none'
+              : `0 0 ${glowSpread}px ${accentColor}${Math.round(40 + pulse * 50).toString(16).padStart(2, '0')}`,
+            transform: `scaleX(${1 + pulse * 0.35})`,
+            transition: pulse > 0.05
+              ? 'height 80ms ease-out, opacity 60ms ease-out, box-shadow 60ms ease-out, transform 60ms ease-out'
+              : 'height 150ms ease-out, opacity 150ms ease-out',
           }}
         />
       </div>

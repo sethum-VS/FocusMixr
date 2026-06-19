@@ -8,6 +8,7 @@ import { MixerDock } from '@/components/mixer/MixerDock';
 import { AuraForgePanel } from '@/components/forge/AuraForgePanel';
 import { useMixState } from '@/hooks/useMixState';
 import { useAudioEngine } from '@/hooks/useAudioEngine';
+import { useAudioAnalysis } from '@/hooks/useAudioAnalysis';
 import { useShaderUniforms } from '@/hooks/useShaderUniforms';
 
 export function FocusMixrExperience() {
@@ -30,8 +31,14 @@ export function FocusMixrExperience() {
   const [journeyProgress, setJourneyProgress] = useState(0);
   const journeyAnimRef = useRef<number | null>(null);
 
-  useAudioEngine(state, (msg) => setToast(msg));
-  const uniforms = useShaderUniforms(state, journeyProgress);
+  const { getCtx, getChannelAnalysers } = useAudioEngine(state, (msg) => setToast(msg));
+  const audioLevels = useAudioAnalysis(
+    getCtx,
+    getChannelAnalysers,
+    state.journeyStarted,
+    state.masterPlaying,
+  );
+  const uniforms = useShaderUniforms(state, journeyProgress, audioLevels);
 
   useEffect(() => {
     if (!toast) return;
@@ -80,6 +87,7 @@ export function FocusMixrExperience() {
       />
       <MixerDock
         state={state}
+        audioLevels={audioLevels}
         onVolumeChange={setVolume}
         onToggle={toggleChannel}
         onMasterVolumeChange={setMasterVolume}

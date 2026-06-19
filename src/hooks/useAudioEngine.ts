@@ -3,10 +3,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { MixState } from '@/types';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
+import type { AnalyserEntry } from '@/hooks/useAudioAnalysis';
 
 interface AudioNode {
   source: AudioBufferSourceNode | null;
   gain: GainNode;
+  analyser: AnalyserNode;
+  scratch: Uint8Array<ArrayBuffer>;
   buffer: AudioBuffer | null;
   loading: boolean;
   failed: boolean;
@@ -19,7 +22,36 @@ export function useAudioEngine(
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const channelNodes = useRef<Map<string, AudioNode>>(new Map());
+  const customSlotById = useRef<Map<string, number>>(new Map());
   const initializedRef = useRef(false);
+
+  const createAnalyser = useCallback((ctx: AudioContext): AnalyserNode => {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.35;
+    return analyser;
+  }, []);
+
+  const getChannelAnalysers = useCallback((): Map<string, AnalyserEntry> => {
+    const map = new Map<string, AnalyserEntry>();
+    for (const ch of BUILTIN_CHANNELS) {
+      const node = channelNodes.current.get(ch.id);
+      if (!node) continue;
+      map.set(ch.id, {
+        analyser: node.analyser,
+        scratch: node.scratch,
+      });
+    }
+    for (let i = 0; i < 4; i++) {
+      const node = channelNodes.current.get(`custom-slot-${i}`);
+      if (!node) continue;
+      map.set(`custom-${i}`, {
+        analyser: node.analyser,
+        scratch: node.scratch,
+      });
+    }
+    return map;
+  }, []);
 
   const getCtx = useCallback((): AudioContext | null => ctxRef.current, []);
 
@@ -69,11 +101,21 @@ export function useAudioEngine(
     if (!channelNodes.current.has(id)) {
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.connect(masterGain);
-      channelNodes.current.set(id, { source: null, gain, buffer: null, loading: false, failed: false });
+      const analyser = createAnalyser(ctx);
+      gain.connect(analyser);
+      analyser.connect(masterGain);
+      channelNodes.current.set(id, {
+        source: null,
+        gain,
+        analyser,
+        scratch: new Uint8Array(analyser.frequencyBinCount),
+        buffer: null,
+        loading: false,
+        failed: false,
+      });
     }
     return channelNodes.current.get(id)!;
-  }, []);
+  }, [createAnalyser]);
 
   const loadAndPlay = useCallback(async (id: string, src: string, volume: number) => {
     const node = getOrCreateNode(id);
@@ -196,6 +238,21 @@ export function useAudioEngine(
         if (node && node.source) stopNode(cs.id);
       }
     }
+
+    // Map custom sound ids to fixed analyser slots for stable shader indices
+    const usedSlots = new Set<number>();
+    state.customSounds.forEach((cs, index) => {
+      let slot = customSlotById.current.get(cs.id);
+      if (slot === undefined) {
+        slot = index < 4 ? index : [...Array(4).keys()].find((s) => !usedSlots.has(s)) ?? 0;
+        customSlotById.current.set(cs.id, slot);
+      }
+      usedSlots.add(slot);
+      const node = channelNodes.current.get(cs.id);
+      if (node) {
+        channelNodes.current.set(`custom-slot-${slot}`, node);
+      }
+    });
   }, [state.journeyStarted, state.customSounds, playCustomSound, stopNode]);
 
   // Cleanup on unmount
@@ -206,5 +263,5 @@ export function useAudioEngine(
     };
   }, []);
 
-  return { getCtx, playCustomSound };
+  return { getCtx, playCustomSound, getChannelAnalysers };
 }

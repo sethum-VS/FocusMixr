@@ -5,10 +5,11 @@ import { GlassPanel } from '@/components/layout/GlassPanel';
 import { SoundChannel } from './SoundChannel';
 import { MasterControl } from './MasterControl';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
-import { MixState, ChannelId } from '@/types';
+import { MixState, ChannelId, AudioLevels } from '@/types';
 
 interface MixerDockProps {
   state: MixState;
+  audioLevels: AudioLevels;
   onVolumeChange: (id: ChannelId, v: number) => void;
   onToggle: (id: ChannelId) => void;
   onMasterVolumeChange: (v: number) => void;
@@ -18,6 +19,7 @@ interface MixerDockProps {
 
 export function MixerDock({
   state,
+  audioLevels,
   onVolumeChange,
   onToggle,
   onMasterVolumeChange,
@@ -38,6 +40,7 @@ export function MixerDock({
           masterVolume={state.masterVolume}
           isPlaying={state.masterPlaying}
           disabled={!journeyStarted}
+          energy={audioLevels.master}
           onVolumeChange={onMasterVolumeChange}
           onTogglePlay={onToggleMasterPlay}
         />
@@ -46,11 +49,12 @@ export function MixerDock({
 
         {/* Built-in channels */}
         <div className="flex flex-1 min-w-0 items-end gap-0 overflow-x-auto scrollbar-hide overscroll-x-contain touch-pan-x pb-0.5">
-          {BUILTIN_CHANNELS.map((ch) => (
+          {BUILTIN_CHANNELS.map((ch, index) => (
             <SoundChannel
               key={ch.id}
               channel={ch}
               state={state.channels[ch.id]}
+              energy={audioLevels.channel[index] ?? 0}
               disabled={!journeyStarted}
               onVolumeChange={(v) => onVolumeChange(ch.id, v)}
               onToggle={() => onToggle(ch.id)}
