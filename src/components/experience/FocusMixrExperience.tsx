@@ -1,5 +1,19 @@
 'use client';
 
+// THREE.Clock is deprecated in THREE.js 0.175+ in favour of THREE.Timer.
+// r3f 9.x still uses Clock internally — suppress the one-time dev warning
+// until r3f updates its internals. Filter is dev-only, no-op in production.
+if (
+  typeof window !== 'undefined' &&
+  process.env.NODE_ENV === 'development'
+) {
+  const _origWarn = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('THREE.Clock:')) return;
+    _origWarn(...args);
+  };
+}
+
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TopNav } from '@/components/nav/TopNav';

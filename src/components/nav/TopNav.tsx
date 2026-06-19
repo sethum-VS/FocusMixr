@@ -34,10 +34,6 @@ export function TopNav({ onStartJourney, journeyStarted }: TopNavProps) {
           Start Journey
         </button>
       )}
-
-      {journeyStarted && (
-        <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" title="Active" />
-      )}
     </nav>
   );
 }

@@ -13,6 +13,11 @@ export const fragmentShader = /* glsl */ `
   uniform float u_masterEnergy;
   uniform float u_journeyProgress;
 
+  // Water-drop ripple — ring buffer of 3 concurrent drops
+  uniform vec2  u_dropPos[3];
+  uniform float u_dropBirthTime[3];
+  uniform float u_dropStrength[3];
+
   varying vec2 vUv;
 
   // --- 2D Simplex noise ---
@@ -47,41 +52,42 @@ export const fragmentShader = /* glsl */ `
   void main() {
     vec2 uv = vUv;
 
-    // Audio drive (0 = silent, 1 = peak energy)
-    float audioDrive = clamp(u_masterEnergy * 2.2, 0.0, 1.0);
+    // Calm audio drive — smoothstep removes micro-jitter at low energy
+    float rawDrive = clamp(u_masterEnergy * 0.85, 0.0, 1.0);
+    float audioDrive = smoothstep(0.04, 0.55, rawDrive);
 
-    // Time advances faster with audio energy (base ×0.15 matching design spec)
-    float t = u_time * (0.15 + audioDrive * 0.32);
+    // Time barely responds to audio — slow organic drift
+    float t = u_time * (0.12 + audioDrive * 0.04);
 
-    // --- Audio-driven domain warp from active channels ---
+    // --- Audio-driven domain warp — very gentle ---
     vec2  warp       = vec2(0.0);
     float warpWeight = 0.0;
     for (int i = 0; i < 6; i++) {
-      float drive = u_channelVolumes[i] * (0.5 + u_channelEnergy[i] * 2.0);
-      float angle = float(i) * 1.047 + t * 0.30;
-      warp       += vec2(cos(angle), sin(angle)) * drive * 0.10;
+      float drive = u_channelVolumes[i] * (0.45 + u_channelEnergy[i] * 0.35);
+      float angle = float(i) * 1.047 + t * 0.18;
+      warp       += vec2(cos(angle), sin(angle)) * drive * 0.022;
       warpWeight += u_channelVolumes[i];
     }
     for (int i = 0; i < 4; i++) {
-      float drive = u_customVolumes[i] * (0.5 + u_customEnergy[i] * 2.0);
-      float angle = float(i) * 1.571 + t * 0.45;
-      warp       += vec2(sin(angle), cos(angle)) * drive * 0.12;
+      float drive = u_customVolumes[i] * (0.45 + u_customEnergy[i] * 0.35);
+      float angle = float(i) * 1.571 + t * 0.22;
+      warp       += vec2(sin(angle), cos(angle)) * drive * 0.028;
       warpWeight += u_customVolumes[i];
     }
     if (warpWeight > 0.001) warp /= warpWeight;
 
     vec2 wuv = uv + warp;
 
-    // --- Organic layered noise (user's design aesthetic) ---
+    // --- Organic layered noise (unchanged) ---
     float n1 = snoise(wuv * 1.5 + t);
-    float n2 = snoise(wuv * 2.5 - t * 0.8 + n1);  // domain-warped by n1
+    float n2 = snoise(wuv * 2.5 - t * 0.8 + n1);
     float n3 = snoise(wuv * 0.5 + t * 0.4);
 
-    // Base palette: deep oceanic blues, forest greens, warm amber, true black
-    vec3 color1 = vec3(0.01, 0.05, 0.15);  // Deep Blue
-    vec3 color2 = vec3(0.02, 0.12, 0.08);  // Forest Green
-    vec3 color3 = vec3(0.18, 0.08, 0.02);  // Warm Amber
-    vec3 color4 = vec3(0.00, 0.00, 0.00);  // True Black
+    // Base palette
+    vec3 color1 = vec3(0.01, 0.05, 0.15);
+    vec3 color2 = vec3(0.02, 0.12, 0.08);
+    vec3 color3 = vec3(0.18, 0.08, 0.02);
+    vec3 color4 = vec3(0.00, 0.00, 0.00);
 
     float m1 = smoothstep(-1.0, 1.0, n1);
     float m2 = smoothstep(-1.0, 1.0, n2);
@@ -90,46 +96,60 @@ export const fragmentShader = /* glsl */ `
     vec3 color = mix(color1, color2, m1);
     color = mix(color, color3, m2 * 0.4);
     color = mix(color, color4, m3 * 0.3);
-
-    // Subtle noise-driven brightness variation (from original design)
     color += 0.05 * n2;
 
-    // --- Channel color accumulation: active sounds tint the palette ---
-    float totalWeight  = 0.0;
-    vec3  channelTint  = vec3(0.0);
+    // --- Channel color accumulation ---
+    float totalWeight = 0.0;
+    vec3  channelTint = vec3(0.0);
     for (int i = 0; i < 6; i++) {
-      float w = u_channelVolumes[i] * u_channelVolumes[i] * (1.0 + u_channelEnergy[i] * 3.5);
+      float w = u_channelVolumes[i] * u_channelVolumes[i] * (1.0 + u_channelEnergy[i] * 0.55);
       channelTint  += u_channelColors[i] * w;
       totalWeight  += w;
     }
     for (int i = 0; i < 4; i++) {
-      float w = u_customVolumes[i] * u_customVolumes[i] * (1.0 + u_customEnergy[i] * 3.5);
+      float w = u_customVolumes[i] * u_customVolumes[i] * (1.0 + u_customEnergy[i] * 0.55);
       channelTint  += u_customColors[i] * w;
       totalWeight  += w;
     }
     if (totalWeight > 0.001) {
       channelTint /= totalWeight;
     } else {
-      // Idle default: deep indigo so the canvas is never totally flat
       channelTint = vec3(0.10, 0.14, 0.40);
     }
 
-    // Blend channel tint into the organic layers — rides the noise mask
-    float tintStrength = clamp(totalWeight * (0.28 + audioDrive * 0.38), 0.0, 0.52);
+    float tintStrength = clamp(totalWeight * (0.24 + audioDrive * 0.16), 0.0, 0.36);
     color = mix(color, color * 0.45 + channelTint * 0.55, tintStrength * m1);
 
-    // Beat-reactive brightness flash
-    color += channelTint * audioDrive * 0.07;
+    color += channelTint * audioDrive * 0.012;
 
-    // --- Journey progress: fade in from near-black, boost saturation ---
-    float brightness = mix(0.32, 1.22, u_journeyProgress) * (1.0 + audioDrive * 0.22);
+    // --- Water-drop ripples (soft dissolve) ---
+    for (int i = 0; i < 3; i++) {
+      float elapsed = (u_time - u_dropBirthTime[i]) * 0.10;
+      if (elapsed > 0.0 && elapsed < 1.8) {
+        float dist = length(uv - u_dropPos[i]);
+
+        float wavefront = elapsed * 0.55;
+        float ringDist  = dist - wavefront;
+        float decay     = exp(-elapsed * 1.1);
+
+        float ring  = exp(-ringDist * ringDist * 120.0) * decay;
+        float ring2 = exp(-(ringDist + 0.08) * (ringDist + 0.08) * 120.0) * decay * 0.22;
+        float ring3 = exp(-(ringDist + 0.16) * (ringDist + 0.16) * 120.0) * decay * 0.08;
+        float pulse = exp(-dist * dist * 22.0) * exp(-elapsed * 6.0);
+
+        float ripple = (ring + ring2 + ring3 + pulse) * u_dropStrength[i];
+        color += channelTint * ripple * 0.14;
+      }
+    }
+
+    float brightness = mix(0.32, 1.22, u_journeyProgress) * (1.0 + audioDrive * 0.04);
     float saturation = mix(0.48, 1.06, u_journeyProgress);
     vec3 grey   = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
     color = mix(grey, color, saturation) * brightness;
 
-    // --- Subtle vignette (spotlight center) ---
-    vec2  vigUv  = uv * 2.0 - 1.0;
-    float vign   = 1.0 - dot(vigUv * vec2(0.50, 0.70), vigUv * vec2(0.50, 0.70));
+    // --- Subtle vignette ---
+    vec2  vigUv = uv * 2.0 - 1.0;
+    float vign  = 1.0 - dot(vigUv * vec2(0.50, 0.70), vigUv * vec2(0.50, 0.70));
     color *= mix(0.22, 1.0, clamp(vign, 0.0, 1.0));
 
     gl_FragColor = vec4(color, 1.0);

@@ -74,7 +74,12 @@ export function HeroSection({ journeyStarted, onStartJourney }: HeroSectionProps
           <span className="absolute -inset-6 rounded-full border border-white/05 animate-ping-slowest pointer-events-none" />
 
           <button
-            onClick={onStartJourney}
+            onClick={(e) => {
+              // Blur before the parent gains aria-hidden to avoid the browser
+              // warning "aria-hidden on an element with a focused descendant".
+              (e.currentTarget as HTMLButtonElement).blur();
+              onStartJourney();
+            }}
             className="relative pointer-events-auto px-12 py-[14px] rounded-full bg-white/10 hover:bg-white/18 border border-white/28 text-white text-[13px] font-medium tracking-[0.20em] uppercase backdrop-blur-md transition-all duration-300 hover:scale-[1.04] active:scale-95 hover:border-white/50 overflow-hidden group"
             aria-label="Start your ambient sound journey"
           >

@@ -2,7 +2,7 @@
 
 ## Deploy Configuration (configured by /setup-deploy)
 - Platform: GCP Cloud Run
-- Production URL: https://focusmixr-1047596610069.us-central1.run.app (set after first deploy; update if custom domain)
+- Production URL: https://focusmixr-sxwjfy6wpq-uc.a.run.app
 - Deploy workflow: `.github/workflows/deploy.yml`
 - Deploy status command: `gcloud run services describe focusmixr --region=us-central1 --format='value(status.url)'`
 - Merge method: squash

@@ -22,9 +22,10 @@ export function MasterControl({
   onVolumeChange,
   onTogglePlay,
 }: MasterControlProps) {
-  const pulse = isPlaying ? Math.min(1, energy * 1.3) : 0;
-  const glowPx = 12 + pulse * 18;
-  const glowAlpha = 0.15 + pulse * 0.28;
+  const pulse = isPlaying ? Math.min(1, energy * 0.85) : 0;
+  const glowPx = 8 + pulse * 10;
+  const glowAlpha = 0.1 + pulse * 0.16;
+  const fluidEase = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
   return (
     <div className="flex shrink-0 items-center gap-2 sm:gap-3 px-2 py-2 sm:px-3 w-[108px] sm:w-auto sm:min-w-[148px]">
@@ -40,7 +41,7 @@ export function MasterControl({
             pulse > 0.05
               ? `0 0 ${glowPx}px rgba(255,255,255,${glowAlpha}), 0 0 ${glowPx * 2}px rgba(255,255,255,${glowAlpha * 0.4})`
               : undefined,
-          transition: 'box-shadow 60ms ease-out',
+          transition: `box-shadow 280ms ${fluidEase}`,
         }}
       >
         {isPlaying ? (
@@ -58,7 +59,9 @@ export function MasterControl({
           <div className="flex items-center gap-[2.5px]">
             {VU_COLORS.map((segColor, i) => {
               const threshold = (i + 1) / VU_COLORS.length;
-              const lit = isPlaying && energy >= threshold * 0.88;
+              const segFill = isPlaying
+                ? Math.min(1, Math.max(0, (energy - threshold * 0.72 + 0.12) / 0.18))
+                : 0;
               return (
                 <div
                   key={i}
@@ -66,10 +69,10 @@ export function MasterControl({
                     width: '4px',
                     height: '7px',
                     borderRadius: '2px',
-                    backgroundColor: lit ? segColor : 'rgba(255,255,255,0.10)',
-                    boxShadow: lit ? `0 0 5px ${segColor}cc` : 'none',
-                    transition: 'background-color 50ms ease-out, box-shadow 50ms ease-out',
-                    opacity: lit ? 1 : 0.45,
+                    backgroundColor: segColor,
+                    opacity: 0.12 + segFill * 0.88,
+                    boxShadow: segFill > 0.15 ? `0 0 ${4 + segFill * 4}px ${segColor}aa` : 'none',
+                    transition: `opacity 280ms ${fluidEase}, box-shadow 280ms ${fluidEase}`,
                   }}
                 />
               );

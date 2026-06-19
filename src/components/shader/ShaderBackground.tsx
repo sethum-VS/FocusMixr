@@ -8,16 +8,31 @@ import { vertexShader } from './aurora.vert';
 import { fragmentShader } from './aurora.frag';
 import { ShaderUniforms } from '@/types';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
+import { expSmooth } from '@/lib/expSmooth';
+
+// Cached at module scope — WebGL support doesn't change at runtime.
+// Without caching, useSyncExternalStore calls getSnapshot() on every render,
+// creating a new unreleased WebGL context each time. Browsers cap at ~16
+// total contexts — hitting that limit kills the oldest context (our canvas).
+let _webglSupportCache: boolean | null = null;
 
 function canUseWebGL(): boolean {
   if (typeof window === 'undefined') return true;
+  if (_webglSupportCache !== null) return _webglSupportCache;
   try {
-    const canvas = document.createElement('canvas');
+    const testCanvas = document.createElement('canvas');
     const gl =
-      canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) ??
-      canvas.getContext('webgl', { failIfMajorPerformanceCaveat: true });
-    return !!gl;
+      testCanvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) ??
+      testCanvas.getContext('webgl', { failIfMajorPerformanceCaveat: true });
+    _webglSupportCache = !!gl;
+    // Immediately release the test context so it doesn't count against the limit.
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+    }
+    return _webglSupportCache;
   } catch {
+    _webglSupportCache = false;
     return false;
   }
 }
@@ -45,6 +60,18 @@ function AuroraMesh({ uniformsRef, reducedMotion }: AuroraMeshProps) {
   const mouseRef = useRef(new THREE.Vector2(0.5, 0.5));
   const journeyLerp = useRef(0);
 
+  // Water-drop transient detection
+  const prevEnergyRef = useRef(0);
+  const lastDropTimeRef = useRef(-9999);
+  const nextDropIdxRef = useRef(0);
+
+  // Second-pass GPU smoothing — decouples shader motion from FFT spikes
+  const smoothMasterRef = useRef(0);
+  const smoothChannelEnergyRef = useRef(new Array(6).fill(0));
+  const smoothChannelVolRef = useRef(new Array(6).fill(0));
+  const smoothCustomEnergyRef = useRef(new Array(4).fill(0));
+  const smoothCustomVolRef = useRef(new Array(4).fill(0));
+
   const uniformDefs = useMemo<Record<string, THREE.IUniform>>(() => ({
     u_time:           { value: 0 },
     u_resolution:     { value: new THREE.Vector2(1, 1) },
@@ -57,6 +84,10 @@ function AuroraMesh({ uniformsRef, reducedMotion }: AuroraMeshProps) {
     u_customEnergy:   { value: new Array(4).fill(0) },
     u_masterEnergy:   { value: 0 },
     u_journeyProgress:{ value: 0 },
+    // Water-drop ripple (ring buffer of 3 concurrent drops)
+    u_dropPos:        { value: Array.from({ length: 3 }, () => new THREE.Vector2(0.5, 0.5)) },
+    u_dropBirthTime:  { value: new Array(3).fill(-9999) },
+    u_dropStrength:   { value: new Array(3).fill(0) },
   }), []);
 
   useEffect(() => {
@@ -76,37 +107,96 @@ function AuroraMesh({ uniformsRef, reducedMotion }: AuroraMeshProps) {
     if (!mat || !uniforms) return;
 
     if (!reducedMotion) {
-      const energyBoost = 1 + (uniforms.masterEnergy ?? 0) * 1.8;
+      // Nearly constant drift — audio barely speeds time
+      const energyBoost = 1 + (smoothMasterRef.current) * 0.18;
       mat.uniforms.u_time.value += delta * energyBoost;
     }
 
     mat.uniforms.u_resolution.value.set(size.width, size.height);
-    mat.uniforms.u_mouse.value.lerp(mouseRef.current, 0.05);
+    mat.uniforms.u_mouse.value.lerp(mouseRef.current, 0.02);
 
-    journeyLerp.current += (uniforms.journeyProgress - journeyLerp.current) * Math.min(delta * 0.8, 1);
+    journeyLerp.current += (uniforms.journeyProgress - journeyLerp.current) * Math.min(delta * 0.5, 1);
     mat.uniforms.u_journeyProgress.value = journeyLerp.current;
+
+    // Smooth all audio-driven values before they hit the GPU
+    smoothMasterRef.current = expSmooth(
+      smoothMasterRef.current,
+      uniforms.masterEnergy ?? 0,
+      delta,
+      1.8,
+      0.9,
+    );
 
     const cc = uniforms.channelColors;
     for (let i = 0; i < 6; i++) {
       (mat.uniforms.u_channelColors.value as THREE.Vector3[])[i]
         ?.set(cc[i * 3] ?? 0, cc[i * 3 + 1] ?? 0, cc[i * 3 + 2] ?? 0);
-    }
-    for (let i = 0; i < 6; i++) {
-      (mat.uniforms.u_channelVolumes.value as number[])[i] = uniforms.channelVolumes[i] ?? 0;
-      (mat.uniforms.u_channelEnergy.value as number[])[i] = uniforms.channelEnergy[i] ?? 0;
+
+      const targetVol = uniforms.channelVolumes[i] ?? 0;
+      const targetEnergy = uniforms.channelEnergy[i] ?? 0;
+      smoothChannelVolRef.current[i] = expSmooth(
+        smoothChannelVolRef.current[i],
+        targetVol,
+        delta,
+        1.6,
+        0.85,
+      );
+      smoothChannelEnergyRef.current[i] = expSmooth(
+        smoothChannelEnergyRef.current[i],
+        targetEnergy,
+        delta,
+        1.5,
+        0.8,
+      );
+      (mat.uniforms.u_channelVolumes.value as number[])[i] = smoothChannelVolRef.current[i];
+      (mat.uniforms.u_channelEnergy.value as number[])[i] = smoothChannelEnergyRef.current[i];
     }
 
     const xc = uniforms.customColors;
     for (let i = 0; i < 4; i++) {
       (mat.uniforms.u_customColors.value as THREE.Vector3[])[i]
         ?.set(xc[i * 3] ?? 0, xc[i * 3 + 1] ?? 0, xc[i * 3 + 2] ?? 0);
-    }
-    for (let i = 0; i < 4; i++) {
-      (mat.uniforms.u_customVolumes.value as number[])[i] = uniforms.customVolumes[i] ?? 0;
-      (mat.uniforms.u_customEnergy.value as number[])[i] = uniforms.customEnergy[i] ?? 0;
+
+      const targetVol = uniforms.customVolumes[i] ?? 0;
+      const targetEnergy = uniforms.customEnergy[i] ?? 0;
+      smoothCustomVolRef.current[i] = expSmooth(
+        smoothCustomVolRef.current[i],
+        targetVol,
+        delta,
+        1.6,
+        0.85,
+      );
+      smoothCustomEnergyRef.current[i] = expSmooth(
+        smoothCustomEnergyRef.current[i],
+        targetEnergy,
+        delta,
+        1.5,
+        0.8,
+      );
+      (mat.uniforms.u_customVolumes.value as number[])[i] = smoothCustomVolRef.current[i];
+      (mat.uniforms.u_customEnergy.value as number[])[i] = smoothCustomEnergyRef.current[i];
     }
 
-    mat.uniforms.u_masterEnergy.value = uniforms.masterEnergy ?? 0;
+    mat.uniforms.u_masterEnergy.value = smoothMasterRef.current;
+
+    // Water-drop: only on large smoothed transients (rain hits, thunder)
+    const curEnergy = smoothMasterRef.current;
+    const energyDelta = curEnergy - prevEnergyRef.current;
+    const currentTime = mat.uniforms.u_time.value;
+    const cooldownOk = (currentTime - lastDropTimeRef.current) > 3.2;
+
+    if (energyDelta > 0.045 && curEnergy > 0.14 && cooldownOk) {
+      const idx = nextDropIdxRef.current % 3;
+      (mat.uniforms.u_dropPos.value as THREE.Vector2[])[idx].set(
+        0.22 + Math.random() * 0.56,
+        0.22 + Math.random() * 0.56,
+      );
+      (mat.uniforms.u_dropBirthTime.value as number[])[idx] = currentTime;
+      (mat.uniforms.u_dropStrength.value as number[])[idx] = Math.min(0.65, energyDelta * 2.5 + 0.12);
+      nextDropIdxRef.current++;
+      lastDropTimeRef.current = currentTime;
+    }
+    prevEnergyRef.current = curEnergy;
   });
 
   return (
@@ -200,10 +290,13 @@ export function ShaderBackground({ uniformsRef, fallbackUniforms }: ShaderBackgr
         style={{ width: '100%', height: '100%' }}
         onCreated={({ gl }) => {
           const canvas = gl.domElement;
+          // preventDefault() signals to the browser that we will handle
+          // context recovery — do NOT unmount here, r3f restores it automatically.
           canvas.addEventListener('webglcontextlost', (e) => {
             e.preventDefault();
-            setWebglFailed(true);
           });
+          // If restoration fails after the browser restores the context,
+          // r3f will surface an error that triggers onError below.
         }}
         onError={() => setWebglFailed(true)}
       >
