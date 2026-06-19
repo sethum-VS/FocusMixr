@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 interface VerticalSliderProps {
   value: number;
@@ -17,8 +17,11 @@ export function VerticalSlider({
   disabled = false,
   label,
 }: VerticalSliderProps) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const fillPercent = Math.round(value * 100);
 

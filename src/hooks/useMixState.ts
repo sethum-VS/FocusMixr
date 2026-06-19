@@ -1,6 +1,6 @@
 'use client';
 
-import { useReducer, useEffect, useCallback, useRef, useState } from 'react';
+import { useReducer, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { MixState, MixAction, ChannelId, CustomSound } from '@/types';
 import { CHANNEL_IDS, MAX_CUSTOM_SOUNDS } from '@/lib/sounds';
 import {
@@ -133,21 +133,28 @@ function loadFromStorage(): Partial<MixState> {
 
 export function useMixState() {
   const [state, dispatch] = useReducer(reducer, defaultState);
-  const [persistReady, setPersistReady] = useState(false);
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   // Restore localStorage after mount to avoid SSR/client hydration mismatch
+  const restoredRef = useRef(false);
   useEffect(() => {
+    if (!isClient || restoredRef.current) return;
+    restoredRef.current = true;
+
     const persisted = loadFromStorage();
     if (Object.keys(persisted).length > 0) {
       dispatch({ type: 'RESTORE_PERSISTED', payload: persisted });
     }
-    setPersistReady(true);
-  }, []);
+  }, [isClient]);
 
   // Hydrate custom sound buffers from IndexedDB after persisted metadata loads
   const loadedBufferIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!persistReady) return;
+    if (!isClient) return;
 
     const ids = state.customSounds
       .filter((s) => !s.buffer && !loadedBufferIdsRef.current.has(s.id))
@@ -166,10 +173,10 @@ export function useMixState() {
       .catch((err) => console.warn('IndexedDB hydrate failed', err));
 
     return () => { cancelled = true; };
-  }, [state.customSounds]);
+  }, [isClient, state.customSounds]);
 
   useEffect(() => {
-    if (!persistReady || typeof window === 'undefined') return;
+    if (!isClient || typeof window === 'undefined') return;
     const toSave: PersistedState = {
       channels: state.channels,
       customSounds: state.customSounds.map(({ id, prompt, accentColor, volume, enabled }) => ({
@@ -179,7 +186,7 @@ export function useMixState() {
       masterPlaying: state.masterPlaying,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  }, [persistReady, state.channels, state.customSounds, state.masterVolume, state.masterPlaying]);
+  }, [isClient, state.channels, state.customSounds, state.masterVolume, state.masterPlaying]);
 
   // Persist new custom sound buffers to IndexedDB
   const savedBuffersRef = useRef<Set<string>>(new Set());

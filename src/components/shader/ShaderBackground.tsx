@@ -166,13 +166,16 @@ interface ShaderBackgroundProps {
 
 export function ShaderBackground({ uniforms }: ShaderBackgroundProps) {
   const [webglFailed, setWebglFailed] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [webglSupported, setWebglSupported] = useState(false);
-
-  useEffect(() => {
-    setWebglSupported(canUseWebGL());
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  const webglSupported = useSyncExternalStore(
+    () => () => {},
+    () => canUseWebGL(),
+    () => false,
+  );
 
   const reducedMotion = useSyncExternalStore(
     subscribeReducedMotion,
