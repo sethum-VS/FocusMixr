@@ -47,12 +47,12 @@ Other runtime env vars (set in Dockerfile / Cloud Run):
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `dev` | `next dev` | Development server at http://localhost:3000 |
-| `build` | `next build` | Production build (standalone output) |
+| `dev` | `next dev --webpack` | Development server at http://localhost:3000 (webpack avoids Turbopack crashes on Windows) |
+| `build` | `next build --webpack` | Production build (standalone output) |
 | `start` | `next start` | Serve production build locally |
 | `lint` | `eslint` | ESLint via eslint-config-next |
 | `test:e2e` | `playwright test` | E2E smoke tests (starts dev server) |
-| `generate:sounds` | `bash scripts/generate-sounds.sh` | Offline ffmpeg procedural loops |
+| `generate:sounds` | `node scripts/generate-sounds.mjs` | Offline ffmpeg procedural loops (cross-platform) |
 | `generate:ambient` | `node scripts/generate-ambient-elevenlabs.mjs` | ElevenLabs AI loops to `public/sounds/` |
 
 ## Project metadata

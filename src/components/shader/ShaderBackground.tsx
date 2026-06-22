@@ -1,6 +1,6 @@
 'use client';
 
-import { RefObject, useRef, useEffect, useMemo, useState } from 'react';
+import { Component, type ErrorInfo, type ReactNode, RefObject, useRef, useEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSyncExternalStore } from 'react';
@@ -9,33 +9,12 @@ import { fragmentShader } from './aurora.frag';
 import { ShaderUniforms } from '@/types';
 import { computeMixedColorFromUniforms } from '@/lib/colorMix';
 import { expSmooth } from '@/lib/expSmooth';
+import { canUseWebGL } from '@/lib/webgl';
 
 // Cached at module scope — WebGL support doesn't change at runtime.
 // Without caching, useSyncExternalStore calls getSnapshot() on every render,
 // creating a new unreleased WebGL context each time. Browsers cap at ~16
 // total contexts — hitting that limit kills the oldest context (our canvas).
-let _webglSupportCache: boolean | null = null;
-
-function canUseWebGL(): boolean {
-  if (typeof window === 'undefined') return true;
-  if (_webglSupportCache !== null) return _webglSupportCache;
-  try {
-    const testCanvas = document.createElement('canvas');
-    const gl =
-      testCanvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) ??
-      testCanvas.getContext('webgl', { failIfMajorPerformanceCaveat: true });
-    _webglSupportCache = !!gl;
-    // Immediately release the test context so it doesn't count against the limit.
-    if (gl) {
-      const ext = gl.getExtension('WEBGL_lose_context');
-      if (ext) ext.loseContext();
-    }
-    return _webglSupportCache;
-  } catch {
-    _webglSupportCache = false;
-    return false;
-  }
-}
 
 function subscribeReducedMotion(onChange: () => void) {
   if (typeof window === 'undefined') return () => {};
@@ -276,10 +255,18 @@ function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
         />
       ))}
       <div
-        className="absolute inset-[-20%] opacity-40 animate-pulse-slow"
+        className="absolute inset-[-20%] animate-aurora-drift"
         style={{
           background: `conic-gradient(from 180deg at 50% 50%, ${mixedColor}33, #020617, ${mixedColor}44, #000)`,
           filter: 'blur(60px)',
+        }}
+      />
+      <div
+        className="absolute inset-[-15%] animate-aurora-drift-alt"
+        style={{
+          background: `radial-gradient(ellipse at 40% 45%, ${mixedColor}28 0%, transparent 55%)`,
+          filter: 'blur(48px)',
+          mixBlendMode: 'screen',
         }}
       />
     </div>
@@ -289,6 +276,27 @@ function CssAuroraFallback({ uniforms }: { uniforms: ShaderUniforms }) {
 interface ShaderBackgroundProps {
   uniformsRef: RefObject<ShaderUniforms>;
   fallbackUniforms: ShaderUniforms;
+}
+
+class WebGLErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.warn('WebGL render failed, using CSS aurora fallback', error, info.componentStack);
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
 }
 
 export function ShaderBackground({ uniformsRef, fallbackUniforms }: ShaderBackgroundProps) {
@@ -318,11 +326,22 @@ export function ShaderBackground({ uniformsRef, fallbackUniforms }: ShaderBackgr
     );
   }
 
-  return (
+  const cssFallback = (
     <div className="fixed inset-0 z-0 pointer-events-none">
-      <Canvas
+      <CssAuroraFallback uniforms={fallbackUniforms} />
+    </div>
+  );
+
+  return (
+    <WebGLErrorBoundary onError={() => setWebglFailed(true)} fallback={cssFallback}>
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <Canvas
         camera={{ position: [0, 0, 1], fov: 90 }}
-        gl={{ antialias: false, powerPreference: 'high-performance' }}
+        gl={{
+          antialias: false,
+          powerPreference: 'default',
+          failIfMajorPerformanceCaveat: false,
+        }}
         dpr={[1, 1.5]}
         style={{ width: '100%', height: '100%' }}
         onCreated={({ gl }) => {
@@ -340,5 +359,6 @@ export function ShaderBackground({ uniformsRef, fallbackUniforms }: ShaderBackgr
         <AuroraMesh uniformsRef={uniformsRef} reducedMotion={reducedMotion} />
       </Canvas>
     </div>
+    </WebGLErrorBoundary>
   );
 }

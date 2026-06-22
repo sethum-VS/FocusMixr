@@ -3,17 +3,19 @@ import { Libre_Caslon_Text, DM_Sans } from 'next/font/google';
 import './globals.css';
 
 const caslonText = Libre_Caslon_Text({
-  weight: ['400', '700'],
+  weight: '400',
   variable: '--font-caslon',
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
 });
 
 const dmSans = DM_Sans({
-  weight: ['300', '400', '500', '600'],
+  weight: ['300', '400', '500'],
   variable: '--font-dm-sans',
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -40,7 +42,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${caslonText.variable} ${dmSans.variable} h-full`}
     >
-      <body className="min-h-full overflow-hidden bg-black antialiased" style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif' }}>
+      <body
+        className="min-h-full overflow-hidden bg-black antialiased"
+        style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif' }}
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

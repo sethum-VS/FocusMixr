@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { MixState } from '@/types';
 import { BUILTIN_CHANNELS } from '@/lib/sounds';
 import type { AnalyserEntry } from '@/hooks/useAudioAnalysis';
@@ -23,7 +23,17 @@ export function useAudioEngine(
   const masterGainRef = useRef<GainNode | null>(null);
   const channelNodes = useRef<Map<string, AudioNode>>(new Map());
   const customSlotById = useRef<Map<string, number>>(new Map());
+  const fetchAbortById = useRef<Map<string, AbortController>>(new Map());
+  const channelsRef = useRef(state.channels);
+  const masterPlayingRef = useRef(state.masterPlaying);
+  const masterVolumeRef = useRef(state.masterVolume);
   const initializedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    channelsRef.current = state.channels;
+    masterPlayingRef.current = state.masterPlaying;
+    masterVolumeRef.current = state.masterVolume;
+  }, [state.channels, state.masterPlaying, state.masterVolume]);
 
   const createAnalyser = useCallback((ctx: AudioContext): AnalyserNode => {
     const analyser = ctx.createAnalyser();
@@ -55,7 +65,7 @@ export function useAudioEngine(
 
   const getCtx = useCallback((): AudioContext | null => ctxRef.current, []);
 
-  // Init AudioContext on journey start
+  // Init AudioContext once when journey starts (volume/play sync handled below).
   useEffect(() => {
     if (!state.journeyStarted || initializedRef.current) return;
     initializedRef.current = true;
@@ -66,12 +76,23 @@ export function useAudioEngine(
 
     const masterGain = ctx.createGain();
     masterGain.gain.setValueAtTime(
-      state.masterPlaying ? state.masterVolume : 0,
+      masterPlayingRef.current ? masterVolumeRef.current : 0,
       ctx.currentTime,
     );
     masterGain.connect(ctx.destination);
     masterGainRef.current = masterGain;
-  }, [state.journeyStarted, state.masterVolume, state.masterPlaying]);
+
+    const onCtxState = () => {
+      if (ctx.state === 'suspended' && document.visibilityState === 'visible' && masterPlayingRef.current) {
+        void ctx.resume();
+      }
+    };
+    ctx.addEventListener('statechange', onCtxState);
+
+    return () => {
+      ctx.removeEventListener('statechange', onCtxState);
+    };
+  }, [state.journeyStarted]);
 
   // Master volume
   useEffect(() => {
@@ -92,6 +113,22 @@ export function useAudioEngine(
       void ctx.suspend();
     }
   }, [state.masterPlaying, state.journeyStarted]);
+
+  // Browsers suspend AudioContext when the tab is hidden (common on Windows sleep / alt-tab).
+  useEffect(() => {
+    if (!state.journeyStarted) return;
+
+    const onVisibility = () => {
+      const ctx = ctxRef.current;
+      if (!ctx || document.visibilityState !== 'visible') return;
+      if (masterPlayingRef.current && ctx.state !== 'running') {
+        void ctx.resume();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [state.journeyStarted]);
 
   const getOrCreateNode = useCallback((id: string): AudioNode | null => {
     const ctx = ctxRef.current;
@@ -119,17 +156,30 @@ export function useAudioEngine(
 
   const loadAndPlay = useCallback(async (id: string, src: string, volume: number) => {
     const node = getOrCreateNode(id);
-    if (!node || node.loading || node.failed) return;
+    if (!node || node.loading) return;
     const ctx = ctxRef.current!;
 
+    fetchAbortById.current.get(id)?.abort();
+    const abort = new AbortController();
+    fetchAbortById.current.set(id, abort);
+
     node.loading = true;
+    node.failed = false;
     try {
-      const resp = await fetch(src);
+      const resp = await fetch(src, { signal: abort.signal });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const arrayBuf = await resp.arrayBuffer();
-      const audioBuf = await ctx.decodeAudioData(arrayBuf);
-      node.buffer = audioBuf;
+      if (abort.signal.aborted) return;
 
+      const chState = channelsRef.current[id as keyof typeof channelsRef.current];
+      if (chState && !chState.enabled) return;
+
+      const audioBuf = await ctx.decodeAudioData(arrayBuf);
+      if (abort.signal.aborted) return;
+
+      if (chState && !chState.enabled) return;
+
+      node.buffer = audioBuf;
       const source = ctx.createBufferSource();
       source.buffer = audioBuf;
       source.loop = true;
@@ -138,18 +188,43 @@ export function useAudioEngine(
       node.source = source;
       node.gain.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       node.failed = true;
       onToast?.(`Sound failed to load: ${id}`);
       console.warn('Audio load error', id, err);
     } finally {
+      if (fetchAbortById.current.get(id) === abort) {
+        fetchAbortById.current.delete(id);
+      }
       node.loading = false;
     }
   }, [getOrCreateNode, onToast]);
+
+  // Retry failed sound fetches when the network comes back.
+  useEffect(() => {
+    if (!state.journeyStarted) return;
+
+    const onOnline = () => {
+      for (const ch of BUILTIN_CHANNELS) {
+        const chState = channelsRef.current[ch.id];
+        const node = channelNodes.current.get(ch.id);
+        if (!chState.enabled || !node?.failed || node.loading || node.source) continue;
+        node.failed = false;
+        void loadAndPlay(ch.id, ch.src, chState.volume);
+      }
+    };
+
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [state.journeyStarted, loadAndPlay]);
 
   const stopNode = useCallback((id: string) => {
     const ctx = ctxRef.current;
     const node = channelNodes.current.get(id);
     if (!node || !ctx) return;
+
+    fetchAbortById.current.get(id)?.abort();
+    fetchAbortById.current.delete(id);
 
     node.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
     if (node.source) {
@@ -172,13 +247,14 @@ export function useAudioEngine(
       const node = channelNodes.current.get(ch.id);
 
       if (chState.enabled) {
-        if (!node || (!node.source && !node.loading && !node.failed)) {
+        if (!node || (!node.source && !node.loading)) {
+          if (node?.failed) node.failed = false;
           loadAndPlay(ch.id, ch.src, chState.volume);
         } else if (node) {
           node.gain.gain.setTargetAtTime(chState.volume, ctx.currentTime, 0.08);
         }
       } else {
-        if (node && node.source) {
+        if (node && (node.source || node.loading)) {
           stopNode(ch.id);
         }
       }

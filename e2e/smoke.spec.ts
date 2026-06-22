@@ -61,6 +61,26 @@ test.describe('FocusMixr smoke', () => {
     await expect(page.getByText('Keyboard', { exact: true })).toBeVisible();
   });
 
+  test('landing page background animations are active', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /shape your/i })).toBeVisible();
+
+    const heroOrbAnim = await page.locator('.hero-orb-1').evaluate((el) => {
+      const style = getComputedStyle(el);
+      return style.animationName !== 'none' && style.animationDuration !== '0s';
+    });
+    expect(heroOrbAnim).toBe(true);
+
+    // ShaderBackground loads client-only; wait for canvas or CSS aurora layer.
+    await expect
+      .poll(async () => {
+        const hasCanvas = (await page.locator('canvas').count()) > 0;
+        const hasAuroraCss = (await page.locator('.animate-aurora-drift').count()) > 0;
+        return hasCanvas || hasAuroraCss;
+      })
+      .toBe(true);
+  });
+
   test('mobile vertical slider adjusts channel volume', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/');
