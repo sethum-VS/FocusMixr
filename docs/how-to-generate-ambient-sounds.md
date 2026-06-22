@@ -77,6 +77,9 @@ Requires ffmpeg. Output goes to `public/sounds/{id}.mp3` for all six channels.
 
 | Symptom | Fix |
 |---------|-----|
+| Dev server exits when opening localhost (Windows) | Next.js 16 defaults to Turbopack, which can crash on Windows due to file locking. This repo uses `next dev --webpack` and `next build --webpack` in `package.json`. Delete `.next`, then retry. Exclude the project folder from antivirus/OneDrive sync if issues persist. |
+| `EBUSY` or `os error 1224` during dev/build | Same as above — Turbopack + Windows Defender/OneDrive. Use webpack scripts, move repo off synced drives. |
+| `cp` command not found (Windows cmd) | Use `copy .env.example .env.local` in Command Prompt, or run commands in Git Bash / PowerShell. |
 | `Missing ELEVENLABS_API_KEY` | Set the key in `.env.local` or export it before running the script |
 | `ElevenLabs 401` or `429` | Check key validity or wait for rate limits to reset |
 | `Unknown sound id(s)` | Use only valid channel ids (see list above) |

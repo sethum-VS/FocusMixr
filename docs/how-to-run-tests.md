@@ -58,6 +58,7 @@ In CI, Playwright retries failed tests twice (`retries: 2`).
 
 | Symptom | Fix |
 |---------|-----|
+| Dev server exits when opening localhost (Windows) | Delete `.next` and run `npm run dev` again. Scripts use `--webpack` to avoid Turbopack file-locking bugs on Windows. Exclude the repo from antivirus/OneDrive if `EBUSY` persists. |
 | Port 3000 already in use | Stop the conflicting process, or let Playwright reuse the existing dev server |
 | Rain test timeout waiting for `/sounds/rain.mp3` | Ensure `public/sounds/rain.mp3` exists (`npm run generate:ambient` or `npm run generate:sounds`) |
 | `webServer` timeout (120s) | Check `npm run dev` starts cleanly; review build errors |

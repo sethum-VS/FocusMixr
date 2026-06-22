@@ -156,14 +156,9 @@ export function useShaderUniforms(
         setFallbackUniforms(uniformsRef.current);
       }
 
-      const animating =
-        next.changed ||
-        (state.journeyStarted && state.masterPlaying) ||
-        (state.journeyStarted && journeyProgress > 0 && journeyProgress < 1);
-
-      if (animating) {
-        raf = requestAnimationFrame(tick);
-      }
+      // Always tick: r3f reads uniformsRef every frame, and the CSS aurora
+      // fallback needs journeyProgress + audio updates even when volumes are steady.
+      raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);

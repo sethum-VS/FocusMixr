@@ -71,7 +71,7 @@ Defaults: `masterVolume: 0.85`, `masterPlaying: true`
 
 ### Error handling
 
-Failed fetch/decode sets `node.failed = true` and shows a toast: `Sound failed to load: {id}`. The channel will not retry until page reload.
+Failed fetch/decode sets `node.failed = true` and shows a toast: `Sound failed to load: {id}`. Re-enable the channel or reconnect (`online` event) to retry automatically.
 
 ## ElevenLabs integration
 

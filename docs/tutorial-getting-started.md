@@ -23,6 +23,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). You should see the hero heading **Shape your environment.** and a **Start Journey** button over the aurora background.
 
+**Windows note:** `npm run dev` uses webpack instead of Turbopack because Next.js 16's default bundler can crash on Windows (silent dev-server exit, `EBUSY` file locks). If the server still fails, delete `.next` and ensure the project is not inside a OneDrive-synced folder.
+
 ## Step 2: Start your first focus session
 
 Click **Start Journey** (or use the nav button). The hero fades out over 1.2 seconds and the glass **mixer dock** slides up from the bottom.

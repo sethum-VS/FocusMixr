@@ -189,6 +189,27 @@ body {
 }
 .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
 
+/* CSS aurora fallback — runs without WebGL or JS RAF */
+@keyframes aurora-drift {
+  0%   { transform: translate(0%, 0%) rotate(0deg) scale(1); opacity: 0.32; }
+  33%  { transform: translate(4%, -3%) rotate(3deg) scale(1.04); opacity: 0.44; }
+  66%  { transform: translate(-3%, 3%) rotate(-2deg) scale(0.97); opacity: 0.38; }
+  100% { transform: translate(0%, 0%) rotate(0deg) scale(1); opacity: 0.32; }
+}
+@keyframes aurora-drift-alt {
+  0%   { transform: translate(0%, 0%) rotate(0deg) scale(1.02); opacity: 0.28; }
+  50%  { transform: translate(-4%, -2%) rotate(-3deg) scale(0.96); opacity: 0.40; }
+  100% { transform: translate(0%, 0%) rotate(0deg) scale(1.02); opacity: 0.28; }
+}
+.animate-aurora-drift {
+  animation: aurora-drift 26s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.animate-aurora-drift-alt {
+  animation: aurora-drift-alt 32s ease-in-out infinite reverse;
+  will-change: transform, opacity;
+}
+
 /* Shimmer sweep */
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }
@@ -205,6 +226,8 @@ body {
   .animate-dock-in,
   .animate-pulse-slow,
   .animate-shimmer,
+  .animate-aurora-drift,
+  .animate-aurora-drift-alt,
   .hero-orb {
     animation: none !important;
   }
