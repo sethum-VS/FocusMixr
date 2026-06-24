@@ -76,7 +76,7 @@ export function AuraForgePanel({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Generation failed';
       setError(msg.includes('key') || msg.includes('401')
-        ? 'Missing or invalid API key — add ELEVENLABS_API_KEY to .env.local'
+        ? 'Aura Forge is unavailable — the server API key is missing or invalid.'
         : `Generation failed — ${msg}`);
     } finally {
       setLoading(false);

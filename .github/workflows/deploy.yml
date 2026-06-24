@@ -111,7 +111,12 @@ jobs:
         run: |
           ENV_FLAG=""
           if [ -n "${ELEVENLABS_API_KEY}" ]; then
-            ENV_FLAG="--set-env-vars=ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}"
+            # Strip accidental surrounding quotes from the secret value
+            CLEAN_KEY="${ELEVENLABS_API_KEY%\"}"
+            CLEAN_KEY="${CLEAN_KEY#\"}"
+            CLEAN_KEY="${CLEAN_KEY%\'}"
+            CLEAN_KEY="${CLEAN_KEY#\'}"
+            ENV_FLAG="--set-env-vars=ELEVENLABS_API_KEY=${CLEAN_KEY}"
           fi
 
           gcloud run deploy "${SERVICE_NAME}" \
