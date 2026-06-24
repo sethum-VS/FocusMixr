@@ -18,11 +18,23 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+function normalizeApiKey(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = normalizeApiKey(process.env.ELEVENLABS_API_KEY);
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'ELEVENLABS_API_KEY is not configured. Add it to .env.local.' },
+      { error: 'ELEVENLABS_API_KEY is not configured on the server.' },
       { status: 401 }
     );
   }
