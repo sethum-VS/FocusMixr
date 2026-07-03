@@ -69,9 +69,11 @@ jobs:
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
           HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
           heroku container:login
+          heroku config:set ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY -a $HEROKU_APP_NAME
           heroku stack:set container -a $HEROKU_APP_NAME
           heroku container:push web -a $HEROKU_APP_NAME
           heroku container:release web -a $HEROKU_APP_NAME
