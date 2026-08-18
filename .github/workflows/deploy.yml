@@ -1,18 +1,26 @@
-name: CI/CD — Cloud Run
+name: Build & Deploy to Azure Container Apps
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: focusmixr-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  AZURE_RESOURCE_GROUP: rg-portfolio
+  AZURE_CONTAINER_APP: ca-focusmixr
+  IMAGE_REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/sethum-vs/focusmixr
+
 jobs:
+  # ===========================================================================
+  #  JOB 1: Lint and Test
+  # ===========================================================================
   lint-and-build:
-    name: Lint and production build
+    name: Lint & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,47 +41,96 @@ jobs:
       - name: Production build
         run: npm run build
 
-  e2e-smoke:
-    name: Playwright smoke tests
+  # ===========================================================================
+  #  JOB 2: Build & Push Next.js Docker Image to GHCR
+  # ===========================================================================
+  build-and-push:
+    name: Build & Push Image
     needs: lint-and-build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          node-version: "20"
-          cache: npm
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: E2E smoke tests
-        run: npm run test:e2e
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+  # ===========================================================================
+  #  JOB 3: Deploy to Azure Container Apps
+  # ===========================================================================
   deploy:
-    name: Deploy to Heroku
-    needs: [lint-and-build, e2e-smoke]
+    name: Deploy to Azure
     runs-on: ubuntu-latest
+    needs: build-and-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
 
-      - name: Deploy to Heroku
-        env:
-          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+    steps:
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure GHCR credentials in Container App
         run: |
-          curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
-          heroku container:login
-          heroku config:set ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY -a $HEROKU_APP_NAME
-          heroku stack:set container -a $HEROKU_APP_NAME
-          heroku container:push web -a $HEROKU_APP_NAME
-          heroku container:release web -a $HEROKU_APP_NAME
+          az containerapp registry set \
+            --name "${{ env.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --server "${{ env.IMAGE_REGISTRY }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Update Container App image
+        run: |
+          az containerapp update \
+            --name "${{ env.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}"
+
+      - name: Get deployed app URL
+        run: |
+          FQDN=$(az containerapp show \
+            --name "${{ env.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "🚀 Deployed to: https://${FQDN}"
+          echo "FQDN=https://${FQDN}" >> "$GITHUB_STEP_SUMMARY"
